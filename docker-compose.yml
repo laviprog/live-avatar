@@ -1,0 +1,12 @@
+services:
+  live-avatar:
+    build:
+      context: .
+      target: runner
+    container_name: live-avatar
+    image: live-avatar:1.0.0
+    ports:
+      - '3003:3000'
+    env_file:
+      - .env.production
+    restart: unless-stopped
