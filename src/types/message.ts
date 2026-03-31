@@ -1,6 +1,6 @@
 export enum MessageSender {
-  USER = "user",
-  AVATAR = "avatar",
+  USER = 'user',
+  AVATAR = 'avatar',
 }
 
 export interface LiveAvatarSessionMessage {
