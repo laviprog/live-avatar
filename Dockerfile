@@ -1,11 +1,13 @@
 FROM node:lts-alpine AS dependencies
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ARG PNPM_VERSION=10.33.0
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM node:lts-alpine AS builder
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ARG PNPM_VERSION=10.33.0
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 COPY . .
 COPY --from=dependencies /app/node_modules ./node_modules
@@ -13,7 +15,8 @@ RUN pnpm run build
 
 # ---- Запуск ----
 FROM node:lts-alpine AS runner
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ARG PNPM_VERSION=10.33.0
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 ENV NODE_ENV=production
 
