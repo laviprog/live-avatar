@@ -11,3 +11,16 @@ body {
   color: var(--white);
   font-family: sans-serif;
 }
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--black);
+  color: var(--white);
+}
+
+select option:disabled {
+  color: #8a8a8a;
+}

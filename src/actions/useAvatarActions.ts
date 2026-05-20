@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useLiveAvatarContext } from '../logic/context';
+import { useLiveAvatarContext } from '@/logic/context';
 
 export const useAvatarActions = (mode: 'FULL' | 'LITE') => {
   const { sessionRef } = useLiveAvatarContext();

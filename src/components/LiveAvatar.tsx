@@ -37,7 +37,7 @@ const getContexts = async (): Promise<Context[]> => {
 
 export const LiveAvatar = () => {
   const [sessionToken, setSessionToken] = useState('');
-  const [mode, setMode] = useState<SessionMode>('FULL');
+  const mode: SessionMode = 'FULL';
   const [startingSession, setStartingSession] = useState(false);
 
   const [isDataLoading, setIsDataLoading] = useState(true);
