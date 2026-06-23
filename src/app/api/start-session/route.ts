@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import { getSessionUser } from '@/lib/auth/session';
+import { getUserByEmail, isAdmin } from '@/lib/auth/users';
 
 interface StartFullModeSessionRequestBody {
   avatarId: string;
@@ -14,7 +16,24 @@ export async function POST(request: NextRequest) {
   let session_token = '';
   let session_id = '';
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const body: StartFullModeSessionRequestBody = await request.json().catch(() => ({}));
+
+    // Проверка прав: обычный пользователь не может запустить чужой аватар/контекст.
+    const user = getUserByEmail(session.email);
+    if (user && !isAdmin(user)) {
+      const avatarAllowed = user.avatarIds?.includes(body.avatarId);
+      const contextAllowed = !body.contextId || user.contextIds?.includes(body.contextId);
+      if (!avatarAllowed || !contextAllowed) {
+        return new Response(JSON.stringify({ error: 'Доступ к аватару или контексту запрещён' }), {
+          status: 403,
+        });
+      }
+    }
 
     const res = await fetch(`${API_URL}/v1/sessions/token`, {
       method: 'POST',

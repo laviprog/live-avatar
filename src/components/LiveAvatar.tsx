@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { LiveAvatarSession } from './LiveAvatarSession';
 import { Avatar } from '@/types/avatar';
 import { Context } from '@/types/context';
+import { SessionUser } from '@/types/user';
 import { toast } from 'react-toastify';
 import { LANGUAGE_LIST } from '@/data/languages';
 
@@ -35,10 +37,25 @@ const getContexts = async (): Promise<Context[]> => {
   return res.json();
 };
 
+const getCurrentUser = async (): Promise<SessionUser | null> => {
+  const res = await fetch('/api/auth/me', {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  return res.json();
+};
+
 export const LiveAvatar = () => {
+  const router = useRouter();
   const [sessionToken, setSessionToken] = useState('');
   const mode: SessionMode = 'FULL';
   const [startingSession, setStartingSession] = useState(false);
+  const [user, setUser] = useState<SessionUser | null>(null);
 
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -47,7 +64,7 @@ export const LiveAvatar = () => {
   const [contexts, setContexts] = useState<Context[]>([]);
   const [avatarId, setAvatarId] = useState('');
   const [contextId, setContextId] = useState<string | null>(null);
-  const [language, setLanguage] = useState('');
+  const [language, setLanguage] = useState('ru');
   const [voiceId, setVoiceId] = useState('');
 
   useEffect(() => {
@@ -56,10 +73,15 @@ export const LiveAvatar = () => {
         setIsDataLoading(true);
         setDataError(null);
 
-        const [fetchedAvatars, fetchedContexts] = await Promise.all([getAvatars(), getContexts()]);
+        const [fetchedAvatars, fetchedContexts, fetchedUser] = await Promise.all([
+          getAvatars(),
+          getContexts(),
+          getCurrentUser(),
+        ]);
 
         setAvatars(fetchedAvatars);
         setContexts(fetchedContexts);
+        setUser(fetchedUser);
 
         if (fetchedAvatars.length > 0) {
           setAvatarId(fetchedAvatars[0].id);
@@ -132,6 +154,17 @@ export const LiveAvatar = () => {
     setSessionToken('');
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      router.replace('/login');
+      router.refresh();
+    }
+  };
+
   if (isDataLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
@@ -163,6 +196,24 @@ export const LiveAvatar = () => {
     <div className="w-full h-full flex flex-col items-center justify-center">
       {!sessionToken ? (
         <div className="w-full max-w-2xl flex flex-col items-center gap-6 p-8">
+          {user && (
+            <div className="w-full flex items-center justify-between text-sm text-white/60">
+              <span>
+                {user.email}
+                {user.role === 'admin' && (
+                  <span className="ml-2 px-2 py-0.5 rounded bg-white/10 text-white/80 text-xs">
+                    admin
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-white/70 hover:text-white underline underline-offset-2 transition-colors"
+              >
+                Выйти
+              </button>
+            </div>
+          )}
           <div className="text-center mb-2">
             <h1 className="text-4xl font-semibold text-white mb-1">LiveAvatar</h1>
           </div>

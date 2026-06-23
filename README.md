@@ -23,6 +23,30 @@ To get the API_KEY, you need to create it on the official website https://app.li
 
 Other variables in .env.example are optional and can be configured as needed.
 
+### Authentication
+
+The app is protected by a simple email/password login. Configure users via two
+environment variables:
+
+```
+# Secret used to sign the session cookie (any long random string).
+# Generate one with: openssl rand -base64 32
+AUTH_SECRET=change-me-to-a-long-random-string
+
+# Users as a JSON array (single line).
+USERS=[{"email":"admin@example.com","password":"admin","role":"admin"},{"email":"user@example.com","password":"user","role":"user","avatarIds":["avatar_id_1"],"contextIds":["context_id_1"]}]
+```
+
+Roles:
+
+- `admin` — access to **all** avatars and contexts.
+- `user` — access only to the avatars/contexts listed in `avatarIds` and
+  `contextIds`. The lists are filtered server-side, and session start is rejected
+  if a user requests an avatar/context they are not allowed to use.
+
+Passwords are stored in plain text in the `USERS` variable — keep `.env.production`
+out of version control.
+
 ### 2. Install dependencies:
 
 Choose your preferred package manager:

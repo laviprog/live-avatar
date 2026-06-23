@@ -1,8 +1,17 @@
+import { getSessionUser } from '@/lib/auth/session';
+import { getUserByEmail, isAdmin } from '@/lib/auth/users';
+import { Avatar } from '@/types/avatar';
+
 const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
 const API_KEY = process.env.API_KEY_HEYGEN!;
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const res = await fetch(`${API_URL}/v1/avatars`, {
       method: 'GET',
       headers: {
@@ -14,32 +23,24 @@ export async function GET() {
     if (!res.ok) {
       const errorData = await res.json();
       console.error('Error getting avatars data:', errorData);
-      return new Response(
-        JSON.stringify({
-          error: errorData.data?.message || 'Failed to get avatars',
-        }),
-        {
-          status: res.status,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+      return Response.json(
+        { error: errorData.data?.message || 'Failed to get avatars' },
+        { status: res.status }
       );
     }
 
-    return new Response(JSON.stringify((await res.json()).data.results), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const avatars: Avatar[] = (await res.json()).data.results;
+
+    // Фильтрация по правам: admin видит всё, обычный пользователь — только разрешённые id.
+    const user = getUserByEmail(session.email);
+    const filtered =
+      user && !isAdmin(user)
+        ? avatars.filter((a) => user.avatarIds?.includes(a.id))
+        : avatars;
+
+    return Response.json(filtered);
   } catch (error) {
     console.error('Error getting avatars data:', error);
-    return new Response(JSON.stringify({ error: 'Failed to get avatars' }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    return Response.json({ error: 'Failed to get avatars' }, { status: 500 });
   }
 }
