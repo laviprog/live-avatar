@@ -11,6 +11,8 @@ import { LANGUAGE_LIST } from '@/data/languages';
 
 export type SessionMode = 'FULL';
 
+const PUBLIC_AVATAR_PAGE_SIZE = 100;
+
 const getAvatars = async (): Promise<Avatar[]> => {
   const res = await fetch('/api/avatars', {
     method: 'GET',
@@ -25,7 +27,10 @@ const getAvatars = async (): Promise<Avatar[]> => {
 };
 
 const getPublicAvatars = async (page: number): Promise<AvatarPage> => {
-  const params = new URLSearchParams({ page: String(page), page_size: '24' });
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(PUBLIC_AVATAR_PAGE_SIZE),
+  });
   const res = await fetch(`/api/avatars/public?${params}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -80,6 +85,7 @@ export const LiveAvatar = () => {
   const [publicAvatarPage, setPublicAvatarPage] = useState(1);
   const [hasMorePublicAvatars, setHasMorePublicAvatars] = useState(false);
   const [loadingMorePublicAvatars, setLoadingMorePublicAvatars] = useState(false);
+  const [publicAvatarSearch, setPublicAvatarSearch] = useState('');
   const [contexts, setContexts] = useState<Context[]>([]);
   const [avatarSource, setAvatarSource] = useState<AvatarSource>('personal');
   const [selectedAvatarIds, setSelectedAvatarIds] = useState<Record<AvatarSource, string>>({
@@ -89,7 +95,13 @@ export const LiveAvatar = () => {
   const [contextId, setContextId] = useState<string | null>(null);
   const [language, setLanguage] = useState('ru');
 
-  const currentAvatars = avatarSource === 'personal' ? avatars : publicAvatars;
+  const normalizedPublicAvatarSearch = publicAvatarSearch.trim().toLocaleLowerCase();
+  const filteredPublicAvatars = normalizedPublicAvatarSearch
+    ? publicAvatars.filter((avatar) =>
+        avatar.name.toLocaleLowerCase().includes(normalizedPublicAvatarSearch)
+      )
+    : publicAvatars;
+  const currentAvatars = avatarSource === 'personal' ? avatars : filteredPublicAvatars;
   const avatarId = selectedAvatarIds[avatarSource];
   const selectedAvatar = currentAvatars.find((avatar) => avatar.id === avatarId);
   const voiceId = selectedAvatar?.default_voice.id ?? '';
@@ -169,6 +181,22 @@ export const LiveAvatar = () => {
 
   const handleAvatarChange = (id: string) => {
     setSelectedAvatarIds((current) => ({ ...current, [avatarSource]: id }));
+  };
+
+  const handlePublicAvatarSearch = (value: string) => {
+    setPublicAvatarSearch(value);
+
+    const normalizedSearch = value.trim().toLocaleLowerCase();
+    const matchingAvatars = normalizedSearch
+      ? publicAvatars.filter((avatar) => avatar.name.toLocaleLowerCase().includes(normalizedSearch))
+      : publicAvatars;
+
+    setSelectedAvatarIds((current) => ({
+      ...current,
+      public: matchingAvatars.some((avatar) => avatar.id === current.public)
+        ? current.public
+        : (matchingAvatars[0]?.id ?? ''),
+    }));
   };
 
   const loadMorePublicAvatars = async () => {
@@ -293,6 +321,45 @@ export const LiveAvatar = () => {
                 })}
               </div>
 
+              {avatarSource === 'public' && (
+                <div className="mb-3">
+                  <label
+                    htmlFor="public-avatar-search"
+                    className="mb-1 block text-sm font-medium text-white"
+                  >
+                    Поиск по публичным аватарам
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="public-avatar-search"
+                      type="search"
+                      value={publicAvatarSearch}
+                      onChange={(event) => handlePublicAvatarSearch(event.target.value)}
+                      placeholder="Введите имя аватара"
+                      autoComplete="off"
+                      className="min-h-10 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-4 text-white placeholder:text-white/35 transition-colors focus:border-white/30 focus:outline-none"
+                    />
+                    {publicAvatarSearch && (
+                      <button
+                        type="button"
+                        onClick={() => handlePublicAvatarSearch('')}
+                        className="min-h-10 rounded-lg px-3 text-sm text-white/65 transition-[background-color,color,transform] hover:bg-white/[0.06] hover:text-white active:scale-[0.96]"
+                      >
+                        Очистить
+                      </button>
+                    )}
+                  </div>
+                  {normalizedPublicAvatarSearch && (
+                    <p className="mt-1.5 text-xs text-white/45">
+                      Найдено:{' '}
+                      <span className="tabular-nums">
+                        {filteredPublicAvatars.length} из {publicAvatars.length}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex min-h-28 gap-4 rounded-xl bg-black/20 p-3">
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
                   {selectedAvatar?.preview_url ? (
@@ -325,7 +392,11 @@ export const LiveAvatar = () => {
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-lg text-white transition-colors focus:border-white/30 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {currentAvatars.length === 0 && (
-                      <option value="">Нет доступных аватаров</option>
+                      <option value="">
+                        {normalizedPublicAvatarSearch
+                          ? 'По вашему запросу ничего не найдено'
+                          : 'Нет доступных аватаров'}
+                      </option>
                     )}
                     {currentAvatars.map((avatar) => (
                       <option key={avatar.id} value={avatar.id}>
