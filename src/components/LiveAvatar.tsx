@@ -12,6 +12,55 @@ import { LANGUAGE_LIST } from '@/data/languages';
 export type SessionMode = 'FULL';
 
 const PUBLIC_AVATAR_PAGE_SIZE = 100;
+const FORM_PREFERENCES_STORAGE_KEY = 'live-avatar:form-preferences';
+
+interface StoredFormPreferences {
+  avatarSource?: AvatarSource;
+  selectedAvatarIds?: Partial<Record<AvatarSource, string>>;
+  contextId?: string | null;
+  language?: string;
+}
+
+const readStoredFormPreferences = (): StoredFormPreferences | null => {
+  try {
+    const rawPreferences = window.localStorage.getItem(FORM_PREFERENCES_STORAGE_KEY);
+    if (!rawPreferences) return null;
+
+    const parsedPreferences: unknown = JSON.parse(rawPreferences);
+    if (!parsedPreferences || typeof parsedPreferences !== 'object') return null;
+
+    const preferences = parsedPreferences as Record<string, unknown>;
+    const selectedAvatarIds =
+      preferences.selectedAvatarIds && typeof preferences.selectedAvatarIds === 'object'
+        ? (preferences.selectedAvatarIds as Record<string, unknown>)
+        : null;
+
+    return {
+      avatarSource:
+        preferences.avatarSource === 'personal' || preferences.avatarSource === 'public'
+          ? preferences.avatarSource
+          : undefined,
+      selectedAvatarIds: selectedAvatarIds
+        ? {
+            personal:
+              typeof selectedAvatarIds.personal === 'string'
+                ? selectedAvatarIds.personal
+                : undefined,
+            public:
+              typeof selectedAvatarIds.public === 'string' ? selectedAvatarIds.public : undefined,
+          }
+        : undefined,
+      contextId:
+        preferences.contextId === null || typeof preferences.contextId === 'string'
+          ? preferences.contextId
+          : undefined,
+      language: typeof preferences.language === 'string' ? preferences.language : undefined,
+    };
+  } catch (error) {
+    console.warn('Failed to read form preferences from localStorage:', error);
+    return null;
+  }
+};
 
 const getAvatars = async (): Promise<Avatar[]> => {
   const res = await fetch('/api/avatars', {
@@ -78,6 +127,7 @@ export const LiveAvatar = () => {
 
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [formPreferencesReady, setFormPreferencesReady] = useState(false);
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [publicAvatars, setPublicAvatars] = useState<Avatar[]>([]);
@@ -122,14 +172,46 @@ export const LiveAvatar = () => {
         setContexts(fetchedContexts);
         setUser(fetchedUser);
 
+        const storedPreferences = readStoredFormPreferences();
+        const personalAvatarId = fetchedAvatars.some(
+          (avatar) => avatar.id === storedPreferences?.selectedAvatarIds?.personal
+        )
+          ? storedPreferences?.selectedAvatarIds?.personal
+          : fetchedAvatars[0]?.id;
+        const publicAvatarId = fetchedPublicAvatars.results.some(
+          (avatar) => avatar.id === storedPreferences?.selectedAvatarIds?.public
+        )
+          ? storedPreferences?.selectedAvatarIds?.public
+          : fetchedPublicAvatars.results[0]?.id;
+        const preferredAvatarSource = storedPreferences?.avatarSource;
+        const restoredAvatarSource =
+          preferredAvatarSource === 'personal' && personalAvatarId
+            ? 'personal'
+            : preferredAvatarSource === 'public' && publicAvatarId
+              ? 'public'
+              : personalAvatarId
+                ? 'personal'
+                : 'public';
+        const restoredContextId =
+          storedPreferences?.contextId === null
+            ? null
+            : fetchedContexts.some((context) => context.id === storedPreferences?.contextId)
+              ? storedPreferences?.contextId
+              : (fetchedContexts[0]?.id ?? null);
+        const restoredLanguage = LANGUAGE_LIST.some(
+          (item) => item.value === storedPreferences?.language
+        )
+          ? storedPreferences?.language
+          : 'ru';
+
         setSelectedAvatarIds({
-          personal: fetchedAvatars[0]?.id ?? '',
-          public: fetchedPublicAvatars.results[0]?.id ?? '',
+          personal: personalAvatarId ?? '',
+          public: publicAvatarId ?? '',
         });
-        setAvatarSource(fetchedAvatars.length > 0 ? 'personal' : 'public');
-        if (fetchedContexts.length > 0) {
-          setContextId(fetchedContexts[0].id);
-        }
+        setAvatarSource(restoredAvatarSource);
+        setContextId(restoredContextId ?? null);
+        setLanguage(restoredLanguage ?? 'ru');
+        setFormPreferencesReady(true);
       } catch (error) {
         console.error('Failed to load form data:', error);
         setDataError('Не удалось загрузить данные. Попробуйте ещё раз.');
@@ -141,6 +223,24 @@ export const LiveAvatar = () => {
 
     loadFormData();
   }, []);
+
+  useEffect(() => {
+    if (!formPreferencesReady) return;
+
+    try {
+      window.localStorage.setItem(
+        FORM_PREFERENCES_STORAGE_KEY,
+        JSON.stringify({
+          avatarSource,
+          selectedAvatarIds,
+          contextId,
+          language,
+        } satisfies StoredFormPreferences)
+      );
+    } catch (error) {
+      console.warn('Failed to save form preferences to localStorage:', error);
+    }
+  }, [avatarSource, contextId, formPreferencesReady, language, selectedAvatarIds]);
 
   const handleStartFullSession = async () => {
     if (!avatarId || !voiceId || !language) {

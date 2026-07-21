@@ -39,7 +39,7 @@ const ActionButton: React.FC<{
   children: React.ReactNode;
 }> = ({ onClick, disabled, variant = 'secondary', size = 'md', children }) => {
   const base =
-    'font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed';
+    'min-h-10 font-medium rounded-lg transition-[background-color,color,opacity,transform] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100';
   const sizes = {
     sm: 'px-4 py-2 text-sm',
     md: 'px-5 py-2.5 text-sm',
@@ -67,6 +67,7 @@ const LiveAvatarSessionComponent: React.FC<{
   onSessionStopped: () => void;
 }> = ({ mode, onSessionStopped }) => {
   const [message, setMessage] = useState('');
+  const [pendingChatAction, setPendingChatAction] = useState<'send' | 'repeat' | null>(null);
   const {
     sessionState,
     isStreamReady,
@@ -137,6 +138,26 @@ const LiveAvatarSessionComponent: React.FC<{
       : connectionQuality === 'BAD'
         ? 'text-red-400'
         : 'text-gray-500';
+  const trimmedMessage = message.trim();
+  const isChatActionPending = pendingChatAction !== null;
+
+  const handleChatAction = async (action: 'send' | 'repeat') => {
+    if (!trimmedMessage || isChatActionPending) return;
+
+    setPendingChatAction(action);
+    try {
+      if (action === 'send') {
+        await sendMessage(trimmedMessage);
+      } else {
+        await repeat(trimmedMessage);
+      }
+      setMessage('');
+    } catch (error) {
+      console.error(`Failed to ${action} chat message:`, error);
+    } finally {
+      setPendingChatAction(null);
+    }
+  };
 
   return (
     <div className="w-full max-w-[1400px] h-full flex flex-col justify-center gap-4 py-4">
@@ -239,39 +260,38 @@ const LiveAvatarSessionComponent: React.FC<{
               ))}
               <div ref={chatEndRef} />
             </div>
-            <div className="shrink-0 px-3 py-3 border-t border-white/10 flex flex-col gap-2">
+            <div
+              className="shrink-0 px-3 py-3 border-t border-white/10 flex flex-col gap-2"
+              aria-busy={isChatActionPending}
+            >
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
+                disabled={isChatActionPending}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && message.trim()) {
-                    sendMessage(message);
-                    setMessage('');
+                  if (e.key === 'Enter' && trimmedMessage && !isChatActionPending) {
+                    void handleChatAction('send');
                   }
                 }}
                 placeholder="Введите сообщение..."
-                className="w-full px-4 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:outline-none focus:border-white/30 placeholder-gray-500 transition-colors"
+                className="w-full px-4 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:outline-none focus:border-white/30 placeholder-gray-500 transition-colors disabled:cursor-wait disabled:opacity-60"
               />
               <div className="flex items-center gap-2">
                 <ActionButton
-                  onClick={() => {
-                    sendMessage(message);
-                    setMessage('');
-                  }}
+                  onClick={() => handleChatAction('send')}
+                  disabled={!trimmedMessage || isChatActionPending}
                   variant="primary"
                   size="sm"
                 >
-                  Отправить
+                  {pendingChatAction === 'send' ? 'Отправка...' : 'Отправить'}
                 </ActionButton>
                 <ActionButton
-                  onClick={() => {
-                    repeat(message);
-                    setMessage('');
-                  }}
+                  onClick={() => handleChatAction('repeat')}
+                  disabled={!trimmedMessage || isChatActionPending}
                   size="sm"
                 >
-                  Повторить
+                  {pendingChatAction === 'repeat' ? 'Повтор...' : 'Повторить'}
                 </ActionButton>
               </div>
             </div>

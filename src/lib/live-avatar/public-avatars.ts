@@ -2,6 +2,7 @@ import { AvatarPage } from '@/types/avatar';
 
 const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
 const API_KEY = process.env.API_KEY_HEYGEN!;
+const PUBLIC_AVATARS_CACHE_TTL_SECONDS = 10 * 60 * 60;
 
 interface LiveAvatarResponse<T> {
   code: number;
@@ -30,7 +31,7 @@ export async function getPublicAvatarPage(page: number, pageSize: number): Promi
       Accept: 'application/json',
       'X-API-KEY': API_KEY,
     },
-    cache: 'no-store',
+    next: { revalidate: PUBLIC_AVATARS_CACHE_TTL_SECONDS },
   });
 
   const payload = (await response
