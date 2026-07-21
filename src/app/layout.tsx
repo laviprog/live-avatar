@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn('h-full font-sans', inter.variable)}>
+    <html lang="ru" className={cn('h-full font-sans', inter.variable)}>
       <body className="h-full flex flex-col justify-center items-center antialiased">
         <ToastContainer
           position="top-left"

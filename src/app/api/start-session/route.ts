@@ -1,12 +1,15 @@
 import { NextRequest } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 import { getUserByEmail, isAdmin } from '@/lib/auth/users';
+import { isPublicAvatar } from '@/lib/live-avatar/public-avatars';
+import { AvatarSource } from '@/types/avatar';
 
 interface StartFullModeSessionRequestBody {
   avatarId: string;
   voiceId: string;
   contextId: string | null;
   language: string;
+  avatarSource?: AvatarSource;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
@@ -18,15 +21,18 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getSessionUser();
     if (!session) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'Требуется авторизация' }), { status: 401 });
     }
 
     const body: StartFullModeSessionRequestBody = await request.json().catch(() => ({}));
 
-    // Проверка прав: обычный пользователь не может запустить чужой аватар/контекст.
+    // Regular users cannot start sessions with personal avatars or contexts they do not own.
     const user = getUserByEmail(session.email);
     if (user && !isAdmin(user)) {
-      const avatarAllowed = user.avatarIds?.includes(body.avatarId);
+      const avatarAllowed =
+        body.avatarSource === 'public'
+          ? await isPublicAvatar(body.avatarId)
+          : user.avatarIds?.includes(body.avatarId);
       const contextAllowed = !body.contextId || user.contextIds?.includes(body.contextId);
       if (!avatarAllowed || !contextAllowed) {
         return new Response(JSON.stringify({ error: 'Доступ к аватару или контексту запрещён' }), {
@@ -77,7 +83,9 @@ export async function POST(request: NextRequest) {
         errorMessage = text || errorMessage;
       }
 
-      return new Response(JSON.stringify({ error: errorMessage }), {
+      console.error('Session token request failed:', errorMessage);
+
+      return new Response(JSON.stringify({ error: 'Не удалось начать сессию' }), {
         status: res.status,
       });
     }
@@ -88,13 +96,13 @@ export async function POST(request: NextRequest) {
     session_id = data.data.session_id;
   } catch (error) {
     console.error('Error retrieving session token:', error);
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
+    return new Response(JSON.stringify({ error: 'Не удалось начать сессию' }), {
       status: 500,
     });
   }
 
   if (!session_token) {
-    return new Response('Failed to retrieve session token', {
+    return new Response('Не удалось начать сессию', {
       status: 500,
     });
   }

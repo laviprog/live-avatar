@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const session = await getSessionUser();
     if (!session) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Требуется авторизация' }, { status: 401 });
     }
 
     const res = await fetch(`${API_URL}/v1/avatars`, {
@@ -23,24 +23,19 @@ export async function GET() {
     if (!res.ok) {
       const errorData = await res.json();
       console.error('Error getting avatars data:', errorData);
-      return Response.json(
-        { error: errorData.data?.message || 'Failed to get avatars' },
-        { status: res.status }
-      );
+      return Response.json({ error: 'Не удалось загрузить аватары' }, { status: res.status });
     }
 
     const avatars: Avatar[] = (await res.json()).data.results;
 
-    // Фильтрация по правам: admin видит всё, обычный пользователь — только разрешённые id.
+    // Rights filtering: the admin sees everything, the regular user sees only the allowed IDs.
     const user = getUserByEmail(session.email);
     const filtered =
-      user && !isAdmin(user)
-        ? avatars.filter((a) => user.avatarIds?.includes(a.id))
-        : avatars;
+      user && !isAdmin(user) ? avatars.filter((a) => user.avatarIds?.includes(a.id)) : avatars;
 
     return Response.json(filtered);
   } catch (error) {
     console.error('Error getting avatars data:', error);
-    return Response.json({ error: 'Failed to get avatars' }, { status: 500 });
+    return Response.json({ error: 'Не удалось загрузить аватары' }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { SessionState, VoiceChatConfig } from '@heygen/liveavatar-web-sdk';
+import { ConnectionQuality, SessionState, VoiceChatConfig } from '@heygen/liveavatar-web-sdk';
 import { SessionMode } from './LiveAvatar';
 import { useSession } from '@/hooks/useSession';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
@@ -9,6 +9,20 @@ import { useAvatarActions } from '@/actions/useAvatarActions';
 import { useTextChat } from '@/hooks/useTextChat';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { LiveAvatarContextProvider } from '@/logic/context';
+
+const SESSION_STATE_LABELS: Record<SessionState, string> = {
+  [SessionState.INACTIVE]: 'Неактивна',
+  [SessionState.CONNECTING]: 'Подключение',
+  [SessionState.CONNECTED]: 'Подключено',
+  [SessionState.DISCONNECTING]: 'Отключение',
+  [SessionState.DISCONNECTED]: 'Отключено',
+};
+
+const CONNECTION_QUALITY_LABELS: Record<ConnectionQuality, string> = {
+  [ConnectionQuality.UNKNOWN]: 'Нет данных',
+  [ConnectionQuality.GOOD]: 'Хорошая связь',
+  [ConnectionQuality.BAD]: 'Плохая связь',
+};
 
 const StatusDot: React.FC<{ active: boolean; label: string }> = ({ active, label }) => (
   <div className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -143,13 +157,13 @@ const LiveAvatarSessionComponent: React.FC<{
                 }`}
               />
               <span className="text-xs text-white/70 font-medium uppercase tracking-wider">
-                {sessionState}
+                {SESSION_STATE_LABELS[sessionState]}
               </span>
             </div>
             <span
               className={`text-xs font-medium uppercase tracking-wider px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm ${qualityColor}`}
             >
-              {connectionQuality}
+              {CONNECTION_QUALITY_LABELS[connectionQuality]}
             </span>
           </div>
           {/* Talking indicators */}
@@ -163,7 +177,7 @@ const LiveAvatarSessionComponent: React.FC<{
                 <div
                   className={`w-2 h-2 rounded-full transition-colors ${isUserTalking ? 'bg-blue-400 animate-pulse' : 'bg-gray-500'}`}
                 />
-                <span className="text-xs text-white/70 font-medium">You</span>
+                <span className="text-xs text-white/70 font-medium">Вы</span>
               </div>
             )}
             <div
@@ -174,7 +188,7 @@ const LiveAvatarSessionComponent: React.FC<{
               <div
                 className={`w-2 h-2 rounded-full transition-colors ${isAvatarTalking ? 'bg-purple-400 animate-pulse' : 'bg-gray-500'}`}
               />
-              <span className="text-xs text-white/70 font-medium">Avatar</span>
+              <span className="text-xs text-white/70 font-medium">Аватар</span>
             </div>
           </div>
           {/* Stop button */}
@@ -182,7 +196,7 @@ const LiveAvatarSessionComponent: React.FC<{
             className="absolute bottom-3 right-3 px-4 py-2 text-sm font-medium rounded-lg bg-red-500/80 text-white hover:bg-red-500 backdrop-blur-sm transition-colors"
             onClick={() => stopSession()}
           >
-            End Session
+            Завершить сессию
           </button>
         </div>
 
@@ -193,7 +207,7 @@ const LiveAvatarSessionComponent: React.FC<{
             style={{ height: videoHeight > 0 ? videoHeight : 400 }}
           >
             <div className="px-4 py-3 border-b border-white/10 shrink-0">
-              <p className="font-medium text-sm text-white">Chat</p>
+              <p className="font-medium text-sm text-white">Чат</p>
             </div>
             <div
               className="flex-1 overflow-y-auto p-3 flex flex-col gap-2"
@@ -201,7 +215,7 @@ const LiveAvatarSessionComponent: React.FC<{
             >
               {chatMessages.length === 0 && (
                 <p className="text-gray-500 text-xs text-center mt-8">
-                  Transcriptions will appear here
+                  Расшифровка диалога появится здесь
                 </p>
               )}
               {chatMessages.map((msg, i) => (
@@ -217,7 +231,7 @@ const LiveAvatarSessionComponent: React.FC<{
                     }`}
                   >
                     <span className="font-medium text-xs uppercase tracking-wider opacity-50 block mb-0.5">
-                      {msg.sender === 'user' ? 'You' : 'Avatar'}
+                      {msg.sender === 'user' ? 'Вы' : 'Аватар'}
                     </span>
                     <p className="leading-relaxed">{msg.message}</p>
                   </div>
@@ -236,7 +250,7 @@ const LiveAvatarSessionComponent: React.FC<{
                     setMessage('');
                   }
                 }}
-                placeholder="Type a message..."
+                placeholder="Введите сообщение..."
                 className="w-full px-4 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:outline-none focus:border-white/30 placeholder-gray-500 transition-colors"
               />
               <div className="flex items-center gap-2">
@@ -248,7 +262,7 @@ const LiveAvatarSessionComponent: React.FC<{
                   variant="primary"
                   size="sm"
                 >
-                  Send
+                  Отправить
                 </ActionButton>
                 <ActionButton
                   onClick={() => {
@@ -257,7 +271,7 @@ const LiveAvatarSessionComponent: React.FC<{
                   }}
                   size="sm"
                 >
-                  Repeat
+                  Повторить
                 </ActionButton>
               </div>
             </div>
@@ -276,14 +290,18 @@ const LiveAvatarSessionComponent: React.FC<{
         {/* Voice Chat */}
         {mode === 'FULL' && (
           <div className="flex items-center gap-2">
-            <StatusDot active={isActive} label="Voice Chat" />
+            <StatusDot active={isActive} label="Голосовой чат" />
             <ActionButton
               onClick={() => (isActive ? stop() : start())}
               disabled={isLoading}
               variant={isActive ? 'danger' : 'primary'}
               size="sm"
             >
-              {isLoading ? 'Loading...' : isActive ? 'Stop Voice Chat' : 'Start Voice Chat'}
+              {isLoading
+                ? 'Загрузка...'
+                : isActive
+                  ? 'Остановить голосовой чат'
+                  : 'Запустить голосовой чат'}
             </ActionButton>
             {isActive && (
               <ActionButton
@@ -291,7 +309,7 @@ const LiveAvatarSessionComponent: React.FC<{
                 size="sm"
                 variant={isMuted ? 'primary' : 'secondary'}
               >
-                {isMuted ? 'Unmute' : 'Mute'}
+                {isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
               </ActionButton>
             )}
           </div>
@@ -300,16 +318,16 @@ const LiveAvatarSessionComponent: React.FC<{
         {/* Avatar Controls */}
         <div className="flex items-center gap-2">
           <ActionButton onClick={startListening} size="sm">
-            Start Listening Pose
+            Включить позу слушания
           </ActionButton>
           <ActionButton onClick={stopListening} size="sm">
-            Stop Listening Pose
+            Выключить позу слушания
           </ActionButton>
           <ActionButton onClick={interrupt} size="sm">
-            Interrupt
+            Прервать
           </ActionButton>
           <ActionButton onClick={keepAlive} size="sm">
-            Keep Alive
+            Продлить сессию
           </ActionButton>
         </div>
       </div>

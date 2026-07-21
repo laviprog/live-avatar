@@ -4,13 +4,13 @@ export interface AppUser {
   email: string;
   password: string;
   role: UserRole;
-  // Только для роли 'user': разрешённые id аватаров и контекстов.
-  // У 'admin' игнорируются — доступ ко всему.
+  // Allowed avatar and context IDs for the 'user' role only.
+  // These lists are ignored for 'admin', which has access to everything.
   avatarIds?: string[];
   contextIds?: string[];
 }
 
-// Данные о текущем пользователе без пароля (для UI/сессии).
+// Current user data without the password, used by the UI and session.
 export interface SessionUser {
   email: string;
   role: UserRole;

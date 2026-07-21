@@ -21,9 +21,9 @@ export const useVoiceChat = () => {
     try {
       return await sessionRef.current.voiceChat.start();
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to start voice chat';
-      console.warn('Voice chat start failed:', message);
-      setError(message);
+      const technicalMessage = e instanceof Error ? e.message : 'Unknown error';
+      console.warn('Voice chat start failed:', technicalMessage);
+      setError('Не удалось запустить голосовой чат');
     }
   }, [sessionRef]);
 

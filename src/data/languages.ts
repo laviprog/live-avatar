@@ -1,8 +1,8 @@
 export const LANGUAGE_LIST = [
   { label: 'Русский', value: 'ru', key: 'ru' },
-  { label: 'English', value: 'en', key: 'en' },
-  { label: 'Spanish', value: 'es', key: 'es' },
-  { label: 'Italian', value: 'it', key: 'it' },
-  { label: 'German', value: 'de', key: 'de' },
-  { label: 'French', value: 'fr', key: 'fr' },
+  { label: 'Английский', value: 'en', key: 'en' },
+  { label: 'Испанский', value: 'es', key: 'es' },
+  { label: 'Итальянский', value: 'it', key: 'it' },
+  { label: 'Немецкий', value: 'de', key: 'de' },
+  { label: 'Французский', value: 'fr', key: 'fr' },
 ];

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { SessionUser } from '@/types/user';
 import { MAX_AGE_SECONDS, SESSION_COOKIE, signSession, verifySession } from './jwt';
 
-/** Ставит cookie сессии (вызывать в route handler / server action). */
+/** Sets the session cookie. Call from a route handler or server action. */
 export async function setSessionCookie(user: SessionUser): Promise<void> {
   const token = await signSession(user);
   const cookieStore = await cookies();
@@ -20,7 +20,7 @@ export async function clearSessionCookie(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE);
 }
 
-/** Возвращает текущего пользователя из cookie (на сервере) или null. */
+/** Returns the current user from the server-side cookie, or null. */
 export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;

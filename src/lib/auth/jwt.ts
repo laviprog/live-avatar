@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { SessionUser } from '@/types/user';
 
 export const SESSION_COOKIE = 'session';
-export const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 дней
+export const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 function getSecretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
@@ -12,7 +12,7 @@ function getSecretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-/** Создаёт подписанный JWT для сессии. */
+/** Creates a signed JWT for the session. */
 export async function signSession(user: SessionUser): Promise<string> {
   return new SignJWT({ email: user.email, role: user.role })
     .setProtectedHeader({ alg: 'HS256' })
@@ -21,7 +21,7 @@ export async function signSession(user: SessionUser): Promise<string> {
     .sign(getSecretKey());
 }
 
-/** Проверяет JWT и возвращает данные пользователя или null. */
+/** Verifies the JWT and returns user data, or null. */
 export async function verifySession(token: string): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());

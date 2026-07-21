@@ -2,6 +2,54 @@
 
 **Live Avatar** is a simple Next.js application that allows real-time interaction with an AI-powered avatar via chat or speech. The avatar is rendered and streamed using the [HeyGen API](https://docs.liveavatar.com/), offering a responsive and engaging user experience.
 
+## Interface
+
+### Session setup
+
+![LiveAvatar session setup with public avatar selection](assets/form.png)
+
+Select a personal or public avatar, an optional context, and the avatar's spoken
+language before starting a session. Public avatars are loaded from the shared
+LiveAvatar catalog and include a preview and default voice.
+
+### Live session
+
+![LiveAvatar video session with chat and voice controls](assets/avatar_session.png)
+
+The live session combines the avatar video stream with text chat, connection
+status, voice chat, microphone controls, listening-pose controls, and session
+management actions.
+
+## Project Structure
+
+```text
+.
+├── assets/                     # Screenshots used in this README
+├── src/
+│   ├── actions/                # Reusable avatar session actions
+│   ├── app/
+│   │   ├── api/                # Authentication and LiveAvatar API routes
+│   │   ├── login/              # Login page
+│   │   ├── error.tsx           # Global error screen
+│   │   ├── layout.tsx          # Root layout and toast container
+│   │   └── page.tsx            # Main application page
+│   ├── components/             # Session setup and live session UI
+│   ├── data/                   # Supported language options
+│   ├── hooks/                  # Chat, voice, and session hooks
+│   ├── lib/
+│   │   ├── auth/               # Users, JWTs, and session cookies
+│   │   └── live-avatar/        # Public avatar API helpers
+│   ├── logic/                  # LiveAvatar SDK context and event handling
+│   ├── types/                  # Shared TypeScript types
+│   └── proxy.ts                # Authentication guard
+├── .env.example                # Environment variable template
+├── docker-compose.yml          # Docker Compose configuration
+├── Dockerfile                  # Production container image
+├── next.config.ts              # Next.js configuration
+├── package.json                # Dependencies and scripts
+└── pnpm-workspace.yaml         # pnpm workspace configuration
+```
+
 ## Getting Started
 
 ### 1. Set up environment variables:
@@ -40,9 +88,9 @@ USERS=[{"email":"admin@example.com","password":"admin","role":"admin"},{"email":
 Roles:
 
 - `admin` — access to **all** avatars and contexts.
-- `user` — access only to the avatars/contexts listed in `avatarIds` and
-  `contextIds`. The lists are filtered server-side, and session start is rejected
-  if a user requests an avatar/context they are not allowed to use.
+- `user` — access to all public avatars plus the personal avatars/contexts listed
+  in `avatarIds` and `contextIds`. The lists and public catalog are verified
+  server-side when a session starts.
 
 Passwords are stored in plain text in the `USERS` variable — keep `.env.production`
 out of version control.
@@ -80,3 +128,7 @@ docker compose up --build -d
 ```
 
 Make sure to update the environment variables in the .env file or configure them through Docker.
+
+## License
+
+This project is distributed under the [MIT License](LICENSE).

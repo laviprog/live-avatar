@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/jwt';
 
-// Пути, доступные без авторизации.
+// Paths available without authentication.
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/logout'];
 
 export async function proxy(request: NextRequest) {
@@ -15,9 +15,9 @@ export async function proxy(request: NextRequest) {
   const user = token ? await verifySession(token) : null;
 
   if (!user) {
-    // API → 401 JSON, страницы → редирект на /login.
+    // Return JSON 401 for API requests and redirect page requests to /login.
     if (pathname.startsWith('/api/')) {
-      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+      return new NextResponse(JSON.stringify({ error: 'Требуется авторизация' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -30,6 +30,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Защищаем всё, кроме статики и внутренних ресурсов Next.
+  // Protect everything except static files and internal Next.js resources.
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

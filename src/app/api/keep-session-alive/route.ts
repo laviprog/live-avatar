@@ -6,7 +6,7 @@ export async function POST(request: Request) {
     const { session_token } = body;
 
     if (!session_token) {
-      return new Response(JSON.stringify({ error: 'session_token is required' }), {
+      return new Response(JSON.stringify({ error: 'Токен сессии обязателен' }), {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       console.error('Error keeping session alive:', errorData);
       return new Response(
         JSON.stringify({
-          error: errorData.data?.message || 'Failed to keep session alive',
+          error: 'Не удалось продлить сессию',
         }),
         {
           status: res.status,
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Session kept alive successfully',
+        message: 'Сессия успешно продлена',
       }),
       {
         status: 200,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Error keeping session alive:', error);
-    return new Response(JSON.stringify({ error: 'Failed to keep session alive' }), {
+    return new Response(JSON.stringify({ error: 'Не удалось продлить сессию' }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',

@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const session = await getSessionUser();
     if (!session) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Требуется авторизация' }, { status: 401 });
     }
 
     const res = await fetch(`${API_URL}/v1/contexts`, {
@@ -23,24 +23,19 @@ export async function GET() {
     if (!res.ok) {
       const errorData = await res.json();
       console.error('Error getting contexts data:', errorData);
-      return Response.json(
-        { error: errorData.data?.message || 'Failed to get contexts' },
-        { status: res.status }
-      );
+      return Response.json({ error: 'Не удалось загрузить контексты' }, { status: res.status });
     }
 
     const contexts: Context[] = (await res.json()).data.results;
 
-    // Фильтрация по правам: admin видит всё, обычный пользователь — только разрешённые id.
+    // Admins see every context; regular users only see explicitly allowed IDs.
     const user = getUserByEmail(session.email);
     const filtered =
-      user && !isAdmin(user)
-        ? contexts.filter((c) => user.contextIds?.includes(c.id))
-        : contexts;
+      user && !isAdmin(user) ? contexts.filter((c) => user.contextIds?.includes(c.id)) : contexts;
 
     return Response.json(filtered);
   } catch (error) {
     console.error('Error getting contexts data:', error);
-    return Response.json({ error: 'Failed to get contexts' }, { status: 500 });
+    return Response.json({ error: 'Не удалось загрузить контексты' }, { status: 500 });
   }
 }

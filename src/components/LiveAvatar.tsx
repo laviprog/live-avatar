@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LiveAvatarSession } from './LiveAvatarSession';
-import { Avatar } from '@/types/avatar';
+import { Avatar, AvatarPage, AvatarSource } from '@/types/avatar';
 import { Context } from '@/types/context';
 import { SessionUser } from '@/types/user';
 import { toast } from 'react-toastify';
@@ -19,6 +19,20 @@ const getAvatars = async (): Promise<Avatar[]> => {
 
   if (!res.ok) {
     throw new Error(`Failed to fetch avatars: ${res.status}`);
+  }
+
+  return res.json();
+};
+
+const getPublicAvatars = async (page: number): Promise<AvatarPage> => {
+  const params = new URLSearchParams({ page: String(page), page_size: '24' });
+  const res = await fetch(`/api/avatars/public?${params}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch public avatars: ${res.status}`);
   }
 
   return res.json();
@@ -61,11 +75,24 @@ export const LiveAvatar = () => {
   const [dataError, setDataError] = useState<string | null>(null);
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [publicAvatars, setPublicAvatars] = useState<Avatar[]>([]);
+  const [publicAvatarCount, setPublicAvatarCount] = useState(0);
+  const [publicAvatarPage, setPublicAvatarPage] = useState(1);
+  const [hasMorePublicAvatars, setHasMorePublicAvatars] = useState(false);
+  const [loadingMorePublicAvatars, setLoadingMorePublicAvatars] = useState(false);
   const [contexts, setContexts] = useState<Context[]>([]);
-  const [avatarId, setAvatarId] = useState('');
+  const [avatarSource, setAvatarSource] = useState<AvatarSource>('personal');
+  const [selectedAvatarIds, setSelectedAvatarIds] = useState<Record<AvatarSource, string>>({
+    personal: '',
+    public: '',
+  });
   const [contextId, setContextId] = useState<string | null>(null);
   const [language, setLanguage] = useState('ru');
-  const [voiceId, setVoiceId] = useState('');
+
+  const currentAvatars = avatarSource === 'personal' ? avatars : publicAvatars;
+  const avatarId = selectedAvatarIds[avatarSource];
+  const selectedAvatar = currentAvatars.find((avatar) => avatar.id === avatarId);
+  const voiceId = selectedAvatar?.default_voice.id ?? '';
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -73,27 +100,28 @@ export const LiveAvatar = () => {
         setIsDataLoading(true);
         setDataError(null);
 
-        const [fetchedAvatars, fetchedContexts, fetchedUser] = await Promise.all([
-          getAvatars(),
-          getContexts(),
-          getCurrentUser(),
-        ]);
+        const [fetchedAvatars, fetchedPublicAvatars, fetchedContexts, fetchedUser] =
+          await Promise.all([getAvatars(), getPublicAvatars(1), getContexts(), getCurrentUser()]);
 
         setAvatars(fetchedAvatars);
+        setPublicAvatars(fetchedPublicAvatars.results);
+        setPublicAvatarCount(fetchedPublicAvatars.count);
+        setHasMorePublicAvatars(Boolean(fetchedPublicAvatars.next));
         setContexts(fetchedContexts);
         setUser(fetchedUser);
 
-        if (fetchedAvatars.length > 0) {
-          setAvatarId(fetchedAvatars[0].id);
-          setVoiceId(fetchedAvatars[0].default_voice.id);
-        }
+        setSelectedAvatarIds({
+          personal: fetchedAvatars[0]?.id ?? '',
+          public: fetchedPublicAvatars.results[0]?.id ?? '',
+        });
+        setAvatarSource(fetchedAvatars.length > 0 ? 'personal' : 'public');
         if (fetchedContexts.length > 0) {
           setContextId(fetchedContexts[0].id);
         }
       } catch (error) {
         console.error('Failed to load form data:', error);
-        setDataError('Failed to load data. Please try again.');
-        toast.error('Failed to load form data');
+        setDataError('Не удалось загрузить данные. Попробуйте ещё раз.');
+        toast.error('Не удалось загрузить данные формы');
       } finally {
         setIsDataLoading(false);
       }
@@ -103,8 +131,8 @@ export const LiveAvatar = () => {
   }, []);
 
   const handleStartFullSession = async () => {
-    if (!avatarId || !language) {
-      toast.error('Please fill in all fields');
+    if (!avatarId || !voiceId || !language) {
+      toast.error('Заполните все обязательные поля');
       return;
     }
 
@@ -118,31 +146,50 @@ export const LiveAvatar = () => {
           contextId,
           language,
           voiceId,
+          avatarSource,
         }),
       });
 
       if (!res.ok) {
         const error = await res.json();
         console.error('Failed to start session', error);
-        toast.error('Failed to start session');
+        toast.error('Не удалось начать сессию');
         return;
       }
 
       const { session_token } = await res.json();
       setSessionToken(session_token);
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to start session');
+      console.error('Failed to start session:', error);
+      toast.error('Не удалось начать сессию');
     } finally {
       setStartingSession(false);
     }
   };
 
   const handleAvatarChange = (id: string) => {
-    setAvatarId(id);
-    const avatar = avatars.find((a) => a.id === id);
-    if (avatar) {
-      setVoiceId(avatar.default_voice.id);
+    setSelectedAvatarIds((current) => ({ ...current, [avatarSource]: id }));
+  };
+
+  const loadMorePublicAvatars = async () => {
+    if (loadingMorePublicAvatars || !hasMorePublicAvatars) return;
+
+    setLoadingMorePublicAvatars(true);
+    try {
+      const nextPage = publicAvatarPage + 1;
+      const result = await getPublicAvatars(nextPage);
+      setPublicAvatars((current) => {
+        const existingIds = new Set(current.map((avatar) => avatar.id));
+        return [...current, ...result.results.filter((avatar) => !existingIds.has(avatar.id))];
+      });
+      setPublicAvatarCount(result.count);
+      setPublicAvatarPage(nextPage);
+      setHasMorePublicAvatars(Boolean(result.next));
+    } catch (error) {
+      console.error('Failed to load more public avatars:', error);
+      toast.error('Не удалось загрузить дополнительные публичные аватары');
+    } finally {
+      setLoadingMorePublicAvatars(false);
     }
   };
 
@@ -170,7 +217,7 @@ export const LiveAvatar = () => {
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-          <p className="text-white/60 text-lg">Loading...</p>
+          <p className="text-white/60 text-lg">Загрузка...</p>
         </div>
       </div>
     );
@@ -185,7 +232,7 @@ export const LiveAvatar = () => {
             onClick={() => window.location.reload()}
             className="px-6 py-3 rounded-lg bg-white/10 text-white font-medium border border-white/20 hover:bg-white/20 transition-colors"
           >
-            Retry
+            Повторить
           </button>
         </div>
       </div>
@@ -193,16 +240,16 @@ export const LiveAvatar = () => {
   }
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center">
+    <div className="w-full h-full flex flex-col items-center justify-center overflow-y-auto">
       {!sessionToken ? (
-        <div className="w-full max-w-2xl flex flex-col items-center gap-6 p-8">
+        <div className="w-full max-w-3xl flex flex-col items-center gap-6 p-8">
           {user && (
             <div className="w-full flex items-center justify-between text-sm text-white/60">
               <span>
                 {user.email}
                 {user.role === 'admin' && (
                   <span className="ml-2 px-2 py-0.5 rounded bg-white/10 text-white/80 text-xs">
-                    admin
+                    администратор
                   </span>
                 )}
               </span>
@@ -219,27 +266,98 @@ export const LiveAvatar = () => {
           </div>
 
           <div className="w-full flex flex-col items-center gap-3">
-            <div className="w-full">
-              <label htmlFor="avatar-select" className="block mb-1 text-sm font-medium text-white">
-                Avatar
-              </label>
-              <select
-                id="avatar-select"
-                value={avatarId}
-                onChange={(e) => handleAvatarChange(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
-              >
-                {avatars.map((avatar) => (
-                  <option key={avatar.id} value={avatar.id}>
-                    {avatar.name}
-                  </option>
-                ))}
-              </select>
+            <div className="w-full rounded-2xl bg-white/[0.04] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+              <div className="mb-3 flex rounded-xl bg-black/25 p-1">
+                {(['personal', 'public'] as const).map((source) => {
+                  const isActive = avatarSource === source;
+                  const count = source === 'personal' ? avatars.length : publicAvatarCount;
+                  const isDisabled = source === 'personal' && avatars.length === 0;
+
+                  return (
+                    <button
+                      key={source}
+                      type="button"
+                      aria-pressed={isActive}
+                      disabled={isDisabled}
+                      onClick={() => setAvatarSource(source)}
+                      className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-medium transition-[background-color,color,transform] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isActive
+                          ? 'bg-white text-black shadow-sm'
+                          : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
+                      }`}
+                    >
+                      {source === 'personal' ? 'Личные' : 'Публичные'}
+                      <span className="ml-2 tabular-nums opacity-60">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex min-h-28 gap-4 rounded-xl bg-black/20 p-3">
+                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
+                  {selectedAvatar?.preview_url ? (
+                    // The provider controls preview hosts, so a native image avoids a brittle host allowlist.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedAvatar.preview_url}
+                      alt={`Превью аватара ${selectedAvatar.name}`}
+                      className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-white/10"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl text-white/30">
+                      ◉
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <label
+                    htmlFor="avatar-select"
+                    className="mb-1 block text-sm font-medium text-white"
+                  >
+                    Аватар
+                  </label>
+                  <select
+                    id="avatar-select"
+                    value={avatarId}
+                    onChange={(e) => handleAvatarChange(e.target.value)}
+                    disabled={currentAvatars.length === 0}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-lg text-white transition-colors focus:border-white/30 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {currentAvatars.length === 0 && (
+                      <option value="">Нет доступных аватаров</option>
+                    )}
+                    {currentAvatars.map((avatar) => (
+                      <option key={avatar.id} value={avatar.id}>
+                        {avatar.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-xs text-white/45">
+                    <span className="truncate">
+                      {selectedAvatar?.default_voice.name ?? 'Голос по умолчанию не задан'}
+                    </span>
+                    {avatarSource === 'public' && hasMorePublicAvatars && (
+                      <button
+                        type="button"
+                        onClick={loadMorePublicAvatars}
+                        disabled={loadingMorePublicAvatars}
+                        className="min-h-10 shrink-0 rounded-lg px-3 text-white/70 transition-[background-color,color,transform] hover:bg-white/[0.06] hover:text-white active:scale-[0.96] disabled:cursor-wait disabled:opacity-50"
+                      >
+                        {loadingMorePublicAvatars
+                          ? 'Загрузка…'
+                          : `Показать ещё (${publicAvatars.length}/${publicAvatarCount})`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="w-full">
               <label htmlFor="context-select" className="block mb-1 text-sm font-medium text-white">
-                Context
+                Контекст
               </label>
               <select
                 id="context-select"
@@ -247,7 +365,7 @@ export const LiveAvatar = () => {
                 onChange={(e) => handleContextChange(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
               >
-                <option value="">None</option>
+                <option value="">Не выбран</option>
                 {contexts.map((context) => (
                   <option key={context.id} value={context.id}>
                     {context.name}
@@ -258,7 +376,7 @@ export const LiveAvatar = () => {
 
             <div className="w-full">
               <label htmlFor="lang-select" className="block mb-1 text-sm font-medium text-white">
-                Language
+                Язык
               </label>
               <select
                 id="lang-select"
@@ -281,10 +399,10 @@ export const LiveAvatar = () => {
           <div className="w-full flex flex-col gap-3">
             <button
               onClick={handleStartFullSession}
-              disabled={startingSession || !avatarId || !language}
-              className="w-full px-6 py-3 rounded-lg bg-white/10 text-white font-medium text-lg border border-white/20 hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={startingSession || !avatarId || !voiceId || !language}
+              className="w-full px-6 py-3 rounded-lg bg-white/10 text-white font-medium text-lg border border-white/20 hover:bg-white/20 active:scale-[0.96] transition-[background-color,transform] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {startingSession ? 'Starting...' : 'Start session'}
+              {startingSession ? 'Запуск...' : 'Начать сессию'}
             </button>
           </div>
         </div>

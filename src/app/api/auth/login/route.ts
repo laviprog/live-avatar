@@ -7,12 +7,12 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json().catch(() => ({}));
 
     if (!email || !password) {
-      return Response.json({ error: 'Email и пароль обязательны' }, { status: 400 });
+      return Response.json({ error: 'Электронная почта и пароль обязательны' }, { status: 400 });
     }
 
     const user = verifyCredentials(email, password);
     if (!user) {
-      return Response.json({ error: 'Неверный email или пароль' }, { status: 401 });
+      return Response.json({ error: 'Неверная электронная почта или пароль' }, { status: 401 });
     }
 
     await setSessionCookie({ email: user.email, role: user.role });

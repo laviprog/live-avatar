@@ -3,8 +3,8 @@ import { AppUser } from '@/types/user';
 let cachedUsers: AppUser[] | null = null;
 
 /**
- * Читает список пользователей из переменной окружения USERS (JSON-массив).
- * Пример значения:
+ * Reads the user list from the USERS environment variable (a JSON array).
+ * Example value:
  * [
  *   { "email": "admin@example.com", "password": "secret", "role": "admin" },
  *   { "email": "user@example.com", "password": "secret", "role": "user",
@@ -43,7 +43,7 @@ export function getUserByEmail(email: string): AppUser | undefined {
   return getUsers().find((u) => u.email === normalized);
 }
 
-/** Проверяет логин/пароль и возвращает пользователя при успехе. */
+/** Verifies credentials and returns the matching user on success. */
 export function verifyCredentials(email: string, password: string): AppUser | null {
   const user = getUserByEmail(email);
   if (!user || user.password !== password) {
