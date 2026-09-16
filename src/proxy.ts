@@ -32,5 +32,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Protect everything except static files and internal Next.js resources.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/', '/((?!_next/static|_next/image|favicon.ico).*)'],
 };
