@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { BASE_PATH } from '@/lib/utils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${BASE_PATH}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

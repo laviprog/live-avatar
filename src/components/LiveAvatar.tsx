@@ -8,6 +8,7 @@ import { Context } from '@/types/context';
 import { SessionUser } from '@/types/user';
 import { toast } from 'react-toastify';
 import { LANGUAGE_LIST } from '@/data/languages';
+import { BASE_PATH } from '@/lib/utils';
 
 export type SessionMode = 'FULL';
 
@@ -63,7 +64,7 @@ const readStoredFormPreferences = (): StoredFormPreferences | null => {
 };
 
 const getAvatars = async (): Promise<Avatar[]> => {
-  const res = await fetch('/api/avatars', {
+  const res = await fetch(`${BASE_PATH}/api/avatars`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
@@ -93,7 +94,7 @@ const getPublicAvatars = async (page: number): Promise<AvatarPage> => {
 };
 
 const getContexts = async (): Promise<Context[]> => {
-  const res = await fetch('/api/contexts', {
+  const res = await fetch(`${BASE_PATH}/api/contexts`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
@@ -106,7 +107,7 @@ const getContexts = async (): Promise<Context[]> => {
 };
 
 const getCurrentUser = async (): Promise<SessionUser | null> => {
-  const res = await fetch('/api/auth/me', {
+  const res = await fetch(`${BASE_PATH}/api/auth/me`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
@@ -250,7 +251,7 @@ export const LiveAvatar = () => {
 
     setStartingSession(true);
     try {
-      const res = await fetch('/api/start-session', {
+      const res = await fetch(`${BASE_PATH}/api/start-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -331,7 +332,7 @@ export const LiveAvatar = () => {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch(`${BASE_PATH}/api/auth/logout`, { method: 'POST' });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

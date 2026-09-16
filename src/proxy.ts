@@ -22,7 +22,8 @@ export async function proxy(request: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const loginUrl = new URL('/login', request.url);
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
     return NextResponse.redirect(loginUrl);
   }
 

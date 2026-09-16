@@ -5,7 +5,14 @@ services:
       target: runner
     image: live-avatar:1.0.0
     ports:
-      - '3003:3000'
+      - '127.0.0.1:3003:3000'
     env_file:
       - .env.production
+    networks:
+      - live-avatar-network
     restart: unless-stopped
+
+networks:
+  live-avatar-network:
+    name: live-avatar-network
+    driver: bridge

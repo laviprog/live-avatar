@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useLiveAvatarContext } from '@/logic/context';
+import { BASE_PATH } from '@/lib/utils';
 
 export const useAvatarActions = (mode: 'FULL' | 'LITE') => {
   const { sessionRef } = useLiveAvatarContext();
@@ -13,7 +14,7 @@ export const useAvatarActions = (mode: 'FULL' | 'LITE') => {
       if (mode === 'FULL') {
         return sessionRef.current.repeat(message);
       } else if (mode === 'LITE') {
-        const res = await fetch('/api/elevenlabs-text-to-speech', {
+        const res = await fetch(`${BASE_PATH}/api/elevenlabs-text-to-speech`, {
           method: 'POST',
           body: JSON.stringify({ text: message }),
         });
