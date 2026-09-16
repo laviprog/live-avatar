@@ -155,7 +155,7 @@ export const LiveAvatar = () => {
   const currentAvatars = avatarSource === 'personal' ? avatars : filteredPublicAvatars;
   const avatarId = selectedAvatarIds[avatarSource];
   const selectedAvatar = currentAvatars.find((avatar) => avatar.id === avatarId);
-  const voiceId = selectedAvatar?.default_voice.id ?? '';
+  const voiceId = selectedAvatar?.default_voice?.id ?? '';
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -508,7 +508,7 @@ export const LiveAvatar = () => {
 
                   <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-xs text-white/45">
                     <span className="truncate">
-                      {selectedAvatar?.default_voice.name ?? 'Голос по умолчанию не задан'}
+                      {selectedAvatar?.default_voice?.name ?? 'Голос по умолчанию не задан'}
                     </span>
                     {avatarSource === 'public' && hasMorePublicAvatars && (
                       <button

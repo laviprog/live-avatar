@@ -11,7 +11,7 @@ export interface Avatar {
   name: string;
   preview_url: string;
   is_expired: boolean;
-  default_voice: Voice;
+  default_voice: Voice | null;
   created_at: string;
   updated_at: string;
   error_message: string | null;
