@@ -81,7 +81,7 @@ const getPublicAvatars = async (page: number): Promise<AvatarPage> => {
     page: String(page),
     page_size: String(PUBLIC_AVATAR_PAGE_SIZE),
   });
-  const res = await fetch(`/api/avatars/public?${params}`, {
+  const res = await fetch(`${BASE_PATH}/api/avatars/public?${params}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
