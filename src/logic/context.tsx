@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   AgentEventsEnum,
   ConnectionQuality,
@@ -11,11 +11,19 @@ import {
 } from '@heygen/liveavatar-web-sdk';
 import { LiveAvatarSessionMessage, MessageSender } from '@/types/message';
 
+const MIC_RESUME_DELAY_MS = 500;
+
 type LiveAvatarContextProps = {
   sessionRef: React.RefObject<LiveAvatarSession>;
 
   isMuted: boolean;
   voiceChatState: VoiceChatState;
+
+  noInterrupt: boolean;
+  isMicSuspended: boolean;
+  isMicMutedByUser: boolean;
+  muteMic: () => Promise<void>;
+  unmuteMic: () => Promise<void>;
 
   sessionState: SessionState;
   isStreamReady: boolean;
@@ -34,6 +42,11 @@ export const LiveAvatarContext = createContext<LiveAvatarContextProps>({
   connectionQuality: ConnectionQuality.UNKNOWN,
   isMuted: true,
   voiceChatState: VoiceChatState.INACTIVE,
+  noInterrupt: false,
+  isMicSuspended: false,
+  isMicMutedByUser: false,
+  muteMic: async () => {},
+  unmuteMic: async () => {},
   sessionState: SessionState.DISCONNECTED,
   isStreamReady: false,
   isUserTalking: false,
@@ -45,6 +58,7 @@ type LiveAvatarContextProviderProps = {
   children: React.ReactNode;
   sessionAccessToken: string;
   voiceChatConfig?: boolean | VoiceChatConfig;
+  noInterrupt?: boolean;
 };
 
 const useSessionState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
@@ -122,6 +136,110 @@ const useTalkingState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
   }, [sessionRef]);
 
   return { isUserTalking, isAvatarTalking };
+};
+
+const useSpeechLock = (sessionRef: React.RefObject<LiveAvatarSession>, enabled: boolean) => {
+  const [isMicSuspended, setIsMicSuspended] = useState(false);
+  const [isMicMutedByUser, setIsMicMutedByUser] = useState(false);
+  // Refs mirror the state for event handlers, which must not depend on render timing
+  const suspendedRef = useRef(false);
+  const mutedByUserRef = useRef(false);
+
+  const setMutedByUser = useCallback((muted: boolean) => {
+    mutedByUserRef.current = muted;
+    setIsMicMutedByUser(muted);
+  }, []);
+
+  // Track the user's own mute choice, ignoring mutes made by the lock itself
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+
+    const handleMuted = () => {
+      if (!suspendedRef.current) setMutedByUser(true);
+    };
+    const handleUnmuted = () => {
+      if (!suspendedRef.current) setMutedByUser(false);
+    };
+    const handleStateChanged = (state: VoiceChatState) => {
+      // Voice chat (re)started while the avatar is speaking: keep the new track silent
+      if (state === VoiceChatState.ACTIVE && suspendedRef.current) {
+        setMutedByUser(session.voiceChat.isMuted);
+        void session.voiceChat.mute();
+      }
+    };
+
+    session.voiceChat.on(VoiceChatEvent.MUTED, handleMuted);
+    session.voiceChat.on(VoiceChatEvent.UNMUTED, handleUnmuted);
+    session.voiceChat.on(VoiceChatEvent.STATE_CHANGED, handleStateChanged);
+
+    return () => {
+      session.voiceChat.off(VoiceChatEvent.MUTED, handleMuted);
+      session.voiceChat.off(VoiceChatEvent.UNMUTED, handleUnmuted);
+      session.voiceChat.off(VoiceChatEvent.STATE_CHANGED, handleStateChanged);
+    };
+  }, [sessionRef, setMutedByUser]);
+
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session || !enabled) return;
+
+    let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearResumeTimer = () => {
+      if (resumeTimer) {
+        clearTimeout(resumeTimer);
+        resumeTimer = null;
+      }
+    };
+
+    const handleAvatarSpeakStarted = () => {
+      clearResumeTimer();
+      if (suspendedRef.current) return;
+
+      suspendedRef.current = true;
+      setIsMicSuspended(true);
+      if (!mutedByUserRef.current) {
+        void session.voiceChat.mute();
+      }
+    };
+
+    const handleAvatarSpeakEnded = () => {
+      clearResumeTimer();
+      resumeTimer = setTimeout(() => {
+        resumeTimer = null;
+        suspendedRef.current = false;
+        setIsMicSuspended(false);
+        if (!mutedByUserRef.current) {
+          void session.voiceChat.unmute();
+        }
+      }, MIC_RESUME_DELAY_MS);
+    };
+
+    session.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
+    session.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, handleAvatarSpeakEnded);
+
+    return () => {
+      session.off(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
+      session.off(AgentEventsEnum.AVATAR_SPEAK_ENDED, handleAvatarSpeakEnded);
+      clearResumeTimer();
+    };
+  }, [sessionRef, enabled]);
+
+  // While suspended, only remember the user's choice; it is applied when the avatar finishes
+  const muteMic = useCallback(async () => {
+    setMutedByUser(true);
+    if (suspendedRef.current) return;
+    await sessionRef.current.voiceChat.mute();
+  }, [sessionRef, setMutedByUser]);
+
+  const unmuteMic = useCallback(async () => {
+    setMutedByUser(false);
+    if (suspendedRef.current) return;
+    await sessionRef.current.voiceChat.unmute();
+  }, [sessionRef, setMutedByUser]);
+
+  return { isMicSuspended, isMicMutedByUser, muteMic, unmuteMic };
 };
 
 const useChatHistoryState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
@@ -218,6 +336,7 @@ export const LiveAvatarContextProvider = ({
   children,
   sessionAccessToken,
   voiceChatConfig = true,
+  noInterrupt = false,
 }: LiveAvatarContextProviderProps) => {
   // Default voice chat on
   const config = {
@@ -230,6 +349,10 @@ export const LiveAvatarContextProvider = ({
 
   const { isMuted, voiceChatState } = useVoiceChatState(sessionRef);
   const { isUserTalking, isAvatarTalking } = useTalkingState(sessionRef);
+  const { isMicSuspended, isMicMutedByUser, muteMic, unmuteMic } = useSpeechLock(
+    sessionRef,
+    noInterrupt
+  );
   const { messages } = useChatHistoryState(sessionRef);
 
   return (
@@ -241,6 +364,11 @@ export const LiveAvatarContextProvider = ({
         connectionQuality,
         isMuted,
         voiceChatState,
+        noInterrupt,
+        isMicSuspended,
+        isMicMutedByUser,
+        muteMic,
+        unmuteMic,
         isUserTalking,
         isAvatarTalking,
         messages,

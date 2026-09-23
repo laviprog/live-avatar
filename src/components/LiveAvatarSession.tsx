@@ -65,7 +65,8 @@ const ActionButton: React.FC<{
 const LiveAvatarSessionComponent: React.FC<{
   mode: SessionMode;
   onSessionStopped: () => void;
-}> = ({ mode, onSessionStopped }) => {
+  noInterrupt: boolean;
+}> = ({ mode, onSessionStopped, noInterrupt }) => {
   const [message, setMessage] = useState('');
   const [pendingChatAction, setPendingChatAction] = useState<'send' | 'repeat' | null>(null);
   const {
@@ -81,6 +82,7 @@ const LiveAvatarSessionComponent: React.FC<{
     isAvatarTalking,
     isUserTalking,
     isMuted,
+    isMicSuspended,
     isActive,
     isLoading,
     start,
@@ -140,9 +142,11 @@ const LiveAvatarSessionComponent: React.FC<{
         : 'text-gray-500';
   const trimmedMessage = message.trim();
   const isChatActionPending = pendingChatAction !== null;
+  // A new chat message would replace the current answer, so wait until the avatar finishes
+  const isChatLocked = noInterrupt && (isAvatarTalking || isMicSuspended);
 
   const handleChatAction = async (action: 'send' | 'repeat') => {
-    if (!trimmedMessage || isChatActionPending) return;
+    if (!trimmedMessage || isChatActionPending || isChatLocked) return;
 
     setPendingChatAction(action);
     try {
@@ -211,6 +215,12 @@ const LiveAvatarSessionComponent: React.FC<{
               />
               <span className="text-xs text-white/70 font-medium">Аватар</span>
             </div>
+            {noInterrupt && isActive && isMicSuspended && !isMuted && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm">
+                <div className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="text-xs text-white/70 font-medium">Микрофон на паузе</span>
+              </div>
+            )}
           </div>
           {/* Stop button */}
           <button
@@ -270,7 +280,12 @@ const LiveAvatarSessionComponent: React.FC<{
                 onChange={(e) => setMessage(e.target.value)}
                 disabled={isChatActionPending}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && trimmedMessage && !isChatActionPending) {
+                  if (
+                    e.key === 'Enter' &&
+                    trimmedMessage &&
+                    !isChatActionPending &&
+                    !isChatLocked
+                  ) {
                     void handleChatAction('send');
                   }
                 }}
@@ -280,7 +295,7 @@ const LiveAvatarSessionComponent: React.FC<{
               <div className="flex items-center gap-2">
                 <ActionButton
                   onClick={() => handleChatAction('send')}
-                  disabled={!trimmedMessage || isChatActionPending}
+                  disabled={!trimmedMessage || isChatActionPending || isChatLocked}
                   variant="primary"
                   size="sm"
                 >
@@ -288,12 +303,15 @@ const LiveAvatarSessionComponent: React.FC<{
                 </ActionButton>
                 <ActionButton
                   onClick={() => handleChatAction('repeat')}
-                  disabled={!trimmedMessage || isChatActionPending}
+                  disabled={!trimmedMessage || isChatActionPending || isChatLocked}
                   size="sm"
                 >
                   {pendingChatAction === 'repeat' ? 'Повтор...' : 'Повторить'}
                 </ActionButton>
               </div>
+              {isChatLocked && (
+                <p className="text-xs text-gray-500">Дождитесь окончания ответа аватара</p>
+              )}
             </div>
           </div>
         )}
@@ -360,13 +378,25 @@ export const LiveAvatarSession: React.FC<{
   sessionAccessToken: string;
   onSessionStopped: () => void;
   voiceChatConfig?: boolean | VoiceChatConfig;
-}> = ({ mode, sessionAccessToken, onSessionStopped, voiceChatConfig = true }) => {
+  noInterrupt?: boolean;
+}> = ({
+  mode,
+  sessionAccessToken,
+  onSessionStopped,
+  voiceChatConfig = true,
+  noInterrupt = false,
+}) => {
   return (
     <LiveAvatarContextProvider
       sessionAccessToken={sessionAccessToken}
       voiceChatConfig={voiceChatConfig}
+      noInterrupt={noInterrupt}
     >
-      <LiveAvatarSessionComponent mode={mode} onSessionStopped={onSessionStopped} />
+      <LiveAvatarSessionComponent
+        mode={mode}
+        onSessionStopped={onSessionStopped}
+        noInterrupt={noInterrupt}
+      />
     </LiveAvatarContextProvider>
   );
 };

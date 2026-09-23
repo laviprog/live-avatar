@@ -20,6 +20,7 @@ interface StoredFormPreferences {
   selectedAvatarIds?: Partial<Record<AvatarSource, string>>;
   contextId?: string | null;
   language?: string;
+  noInterrupt?: boolean;
 }
 
 const readStoredFormPreferences = (): StoredFormPreferences | null => {
@@ -56,6 +57,8 @@ const readStoredFormPreferences = (): StoredFormPreferences | null => {
           ? preferences.contextId
           : undefined,
       language: typeof preferences.language === 'string' ? preferences.language : undefined,
+      noInterrupt:
+        typeof preferences.noInterrupt === 'boolean' ? preferences.noInterrupt : undefined,
     };
   } catch (error) {
     console.warn('Failed to read form preferences from localStorage:', error);
@@ -145,6 +148,7 @@ export const LiveAvatar = () => {
   });
   const [contextId, setContextId] = useState<string | null>(null);
   const [language, setLanguage] = useState('ru');
+  const [noInterrupt, setNoInterrupt] = useState(false);
 
   const normalizedPublicAvatarSearch = publicAvatarSearch.trim().toLocaleLowerCase();
   const filteredPublicAvatars = normalizedPublicAvatarSearch
@@ -212,6 +216,7 @@ export const LiveAvatar = () => {
         setAvatarSource(restoredAvatarSource);
         setContextId(restoredContextId ?? null);
         setLanguage(restoredLanguage ?? 'ru');
+        setNoInterrupt(storedPreferences?.noInterrupt ?? false);
         setFormPreferencesReady(true);
       } catch (error) {
         console.error('Failed to load form data:', error);
@@ -236,12 +241,13 @@ export const LiveAvatar = () => {
           selectedAvatarIds,
           contextId,
           language,
+          noInterrupt,
         } satisfies StoredFormPreferences)
       );
     } catch (error) {
       console.warn('Failed to save form preferences to localStorage:', error);
     }
-  }, [avatarSource, contextId, formPreferencesReady, language, selectedAvatarIds]);
+  }, [avatarSource, contextId, formPreferencesReady, language, noInterrupt, selectedAvatarIds]);
 
   const handleStartFullSession = async () => {
     if (!avatarId || !voiceId || !language) {
@@ -566,6 +572,27 @@ export const LiveAvatar = () => {
                 ))}
               </select>
             </div>
+
+            <label
+              htmlFor="no-interrupt"
+              className="w-full flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition-colors hover:border-white/20"
+            >
+              <input
+                id="no-interrupt"
+                type="checkbox"
+                checked={noInterrupt}
+                onChange={(e) => setNoInterrupt(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-white"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-white">
+                  Не прерывать аватара во время ответа
+                </span>
+                <span className="text-xs text-white/45">
+                  Микрофон отключается, пока аватар говорит
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="w-full flex flex-col gap-3">
@@ -583,6 +610,7 @@ export const LiveAvatar = () => {
           mode={mode}
           sessionAccessToken={sessionToken}
           onSessionStopped={onSessionStopped}
+          noInterrupt={noInterrupt}
         />
       )}
     </div>

@@ -3,18 +3,30 @@ import { useLiveAvatarContext } from '@/logic/context';
 import { VoiceChatState } from '@heygen/liveavatar-web-sdk';
 
 export const useVoiceChat = () => {
-  const { sessionRef, isMuted, voiceChatState, isUserTalking, isAvatarTalking } =
-    useLiveAvatarContext();
+  const {
+    sessionRef,
+    isMuted: isTrackMuted,
+    voiceChatState,
+    isUserTalking,
+    isAvatarTalking,
+    isMicSuspended,
+    isMicMutedByUser,
+    muteMic,
+    unmuteMic,
+  } = useLiveAvatarContext();
+
+  // While the microphone is suspended, show the user's own choice rather than the track state
+  const isMuted = isMicSuspended ? isMicMutedByUser : isTrackMuted;
 
   const [error, setError] = useState<string | null>(null);
 
   const mute = useCallback(async () => {
-    return await sessionRef.current.voiceChat.mute();
-  }, [sessionRef]);
+    return await muteMic();
+  }, [muteMic]);
 
   const unmute = useCallback(async () => {
-    return await sessionRef.current.voiceChat.unmute();
-  }, [sessionRef]);
+    return await unmuteMic();
+  }, [unmuteMic]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -56,6 +68,7 @@ export const useVoiceChat = () => {
     isLoading,
     isActive,
     isMuted,
+    isMicSuspended,
     isUserTalking,
     isAvatarTalking,
     startPushToTalk,
