@@ -1,6 +1,6 @@
-import { unauthorized } from '@/lib/auth/responses';
+import { forbidden, unauthorized } from '@/lib/auth/responses';
 import { getCurrentUser } from '@/lib/auth/session';
-import { isAdmin } from '@/lib/auth/users';
+import { getSessionSetup, isAdmin } from '@/lib/auth/users';
 import { type LiveAvatarResponse, liveAvatarFetch } from '@/lib/live-avatar/api';
 import type { Context } from '@/types/context';
 
@@ -8,6 +8,7 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+    if (getSessionSetup(user) !== 'persona') return forbidden();
 
     const res = await liveAvatarFetch('/v1/contexts');
     if (!res.ok) {

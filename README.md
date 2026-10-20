@@ -82,7 +82,7 @@ environment variables:
 AUTH_SECRET=change-me-to-a-long-random-string
 
 # Users as a JSON array (single line).
-USERS=[{"email":"admin@example.com","password":"admin","role":"admin"},{"email":"user@example.com","password":"user","role":"user","avatarIds":["avatar_id_1"],"contextIds":["context_id_1"],"voiceAgentIds":["voice_agent_id_1"]}]
+USERS=[{"email":"admin@example.com","password":"admin","role":"admin"},{"email":"user@example.com","password":"user","role":"user","avatarIds":["avatar_id_1"],"contextIds":["context_id_1"]},{"email":"agent@example.com","password":"agent","role":"user","sessionSetup":"voiceAgent","avatarIds":["avatar_id_1"],"voiceAgentIds":["voice_agent_id_1"]}]
 ```
 
 Roles:
@@ -93,19 +93,21 @@ Roles:
   `avatarIds`, `contextIds`, and `voiceAgentIds`. The lists are verified
   server-side when a session starts.
 
-### Voice agents
+### Session setup
 
-A session can be configured in two ways:
+Each user has a `sessionSetup` that decides how the session form looks and which
+request the server accepts when a session starts:
 
-- **Voice agent** (recommended) — pick a stored
+- `"persona"` (default) — the avatar's default voice plus an optional context.
+  Uses the deprecated `avatar_persona` API field; the default keeps existing
+  user entries working.
+- `"voiceAgent"` — a stored
   [voice agent](https://docs.liveavatar.com/docs/core-concepts/voice-agents)
-  that defines the voice and context; the selected language overrides the
-  agent's language for that session. Agents are created in the LiveAvatar
-  dashboard. Only `liveavatar_agent` agents are listed, since other types run a
-  LITE session that this app does not support.
-- **Avatar + context** — the avatar's default voice plus an optional context.
-  This uses the deprecated `avatar_persona` API field and is kept until all
-  setups move to voice agents.
+  defines the voice and context; the first available agent is preselected and
+  the selected language overrides the agent's language for that session.
+  Agents are created in the LiveAvatar dashboard. Only `liveavatar_agent`
+  agents are listed, since other types run a LITE session that this app does
+  not support.
 
 Passwords are stored in plain text in the `USERS` variable — keep `.env.local`
 out of version control.

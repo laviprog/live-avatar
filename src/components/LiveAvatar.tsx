@@ -7,7 +7,7 @@ import { LANGUAGE_LIST } from '@/data/languages';
 import { BASE_PATH } from '@/lib/utils';
 import type { Avatar, AvatarPage, AvatarSource } from '@/types/avatar';
 import type { Context } from '@/types/context';
-import type { SessionUser } from '@/types/user';
+import type { UserProfile } from '@/types/user';
 import type { VoiceAgent } from '@/types/voice-agent';
 import { LiveAvatarSession } from './LiveAvatarSession';
 
@@ -114,22 +114,20 @@ const getContexts = async (): Promise<Context[]> => {
   return res.json();
 };
 
-// Voice agents are optional: if they fail to load, the form falls back to avatar + context
 const getVoiceAgents = async (): Promise<VoiceAgent[]> => {
-  try {
-    const res = await fetch(`${BASE_PATH}/api/voice-agents`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) throw new Error(`Failed to fetch voice agents: ${res.status}`);
-    return await res.json();
-  } catch (error) {
-    console.warn(error);
-    return [];
+  const res = await fetch(`${BASE_PATH}/api/voice-agents`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch voice agents: ${res.status}`);
   }
+
+  return res.json();
 };
 
-const getCurrentUser = async (): Promise<SessionUser | null> => {
+const getCurrentUser = async (): Promise<UserProfile | null> => {
   const res = await fetch(`${BASE_PATH}/api/auth/me`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -146,7 +144,7 @@ export const LiveAvatar = () => {
   const router = useRouter();
   const [sessionToken, setSessionToken] = useState('');
   const [startingSession, setStartingSession] = useState(false);
-  const [user, setUser] = useState<SessionUser | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
 
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -182,8 +180,9 @@ export const LiveAvatar = () => {
   const avatarId = selectedAvatarIds[avatarSource];
   const selectedAvatar = currentAvatars.find((avatar) => avatar.id === avatarId);
   const voiceId = selectedAvatar?.default_voice?.id ?? '';
-  // A voice agent brings its own voice and context, so the avatar's voice is not required then
-  const canStart = Boolean(avatarId && language && (voiceAgentId || voiceId));
+  // Per-user setting from USERS: a voice agent brings its own voice and context
+  const usesVoiceAgent = user?.sessionSetup === 'voiceAgent';
+  const canStart = Boolean(avatarId && language && (usesVoiceAgent ? voiceAgentId : voiceId));
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -191,8 +190,10 @@ export const LiveAvatar = () => {
         setIsDataLoading(true);
         setDataError(null);
 
-        // The public catalog is admin-only, so request it only once the role is known
+        // The public catalog is admin-only and contexts vs voice agents depend on the user's
+        // setup, so those requests wait for the profile
         const userRequest = getCurrentUser();
+        const usesAgents = userRequest.then((u) => u?.sessionSetup === 'voiceAgent');
         const [
           fetchedAvatars,
           fetchedPublicAvatars,
@@ -202,8 +203,8 @@ export const LiveAvatar = () => {
         ] = await Promise.all([
           getAvatars(),
           userRequest.then((u) => (u?.role === 'admin' ? getPublicAvatars(1) : EMPTY_AVATAR_PAGE)),
-          getContexts(),
-          getVoiceAgents(),
+          usesAgents.then((agents) => (agents ? [] : getContexts())),
+          usesAgents.then((agents) => (agents ? getVoiceAgents() : [])),
           userRequest,
         ]);
 
@@ -249,10 +250,11 @@ export const LiveAvatar = () => {
         });
         setAvatarSource(restoredAvatarSource);
         setContextId(restoredContextId ?? null);
+        // Keep the saved agent if it is still available, otherwise default to the first one
         setVoiceAgentId(
-          fetchedVoiceAgents.some((agent) => agent.id === storedPreferences?.voiceAgentId)
-            ? (storedPreferences?.voiceAgentId ?? null)
-            : null
+          fetchedVoiceAgents.find((agent) => agent.id === storedPreferences?.voiceAgentId)?.id ??
+            fetchedVoiceAgents[0]?.id ??
+            null
         );
         setLanguage(restoredLanguage ?? 'ru');
         setNoInterrupt(storedPreferences?.noInterrupt ?? false);
@@ -309,7 +311,7 @@ export const LiveAvatar = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
-          voiceAgentId
+          usesVoiceAgent
             ? { avatarId, language, voiceAgentId }
             : { avatarId, language, voiceId, contextId }
         ),
@@ -564,7 +566,7 @@ export const LiveAvatar = () => {
 
                   <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-xs text-white/45">
                     <span className="truncate">
-                      {voiceAgentId
+                      {usesVoiceAgent
                         ? 'Голос задаётся голосовым агентом'
                         : (selectedAvatar?.default_voice?.name ?? 'Голос по умолчанию не задан')}
                     </span>
@@ -585,7 +587,7 @@ export const LiveAvatar = () => {
               </div>
             </div>
 
-            {voiceAgents.length > 0 && (
+            {usesVoiceAgent ? (
               <div className="w-full">
                 <label
                   htmlFor="voice-agent-select"
@@ -596,10 +598,13 @@ export const LiveAvatar = () => {
                 <select
                   id="voice-agent-select"
                   value={voiceAgentId ?? ''}
-                  onChange={(e) => setVoiceAgentId(e.target.value || null)}
-                  className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
+                  onChange={(e) => setVoiceAgentId(e.target.value)}
+                  disabled={voiceAgents.length === 0}
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="">Не выбран — голос аватара и контекст</option>
+                  {voiceAgents.length === 0 && (
+                    <option value="">Нет доступных голосовых агентов</option>
+                  )}
                   {voiceAgents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
                       {agent.is_public ? `${agent.name} (публичный)` : agent.name}
@@ -607,30 +612,29 @@ export const LiveAvatar = () => {
                   ))}
                 </select>
               </div>
+            ) : (
+              <div className="w-full">
+                <label
+                  htmlFor="context-select"
+                  className="block mb-1 text-sm font-medium text-white"
+                >
+                  Контекст
+                </label>
+                <select
+                  id="context-select"
+                  value={contextId ?? ''}
+                  onChange={(e) => handleContextChange(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
+                >
+                  <option value="">Не выбран</option>
+                  {contexts.map((context) => (
+                    <option key={context.id} value={context.id}>
+                      {context.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
-
-            <div className="w-full">
-              <label htmlFor="context-select" className="block mb-1 text-sm font-medium text-white">
-                Контекст
-              </label>
-              <select
-                id="context-select"
-                value={contextId ?? ''}
-                onChange={(e) => handleContextChange(e.target.value)}
-                disabled={Boolean(voiceAgentId)}
-                className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Не выбран</option>
-                {contexts.map((context) => (
-                  <option key={context.id} value={context.id}>
-                    {context.name}
-                  </option>
-                ))}
-              </select>
-              {voiceAgentId && (
-                <p className="mt-1.5 text-xs text-white/45">Контекст задаётся голосовым агентом</p>
-              )}
-            </div>
 
             <div className="w-full">
               <label htmlFor="lang-select" className="block mb-1 text-sm font-medium text-white">

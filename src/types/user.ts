@@ -1,18 +1,25 @@
 export type UserRole = 'admin' | 'user';
 
+// How a user configures a session:
+// - 'persona': the avatar's default voice plus an optional context (deprecated avatar_persona API)
+// - 'voiceAgent': a stored voice agent that defines the voice and context
+export type SessionSetup = 'persona' | 'voiceAgent';
+
 export interface AppUser {
   email: string;
   password: string;
   role: UserRole;
-  // Allowed avatar, context and voice agent IDs for the 'user' role only.
-  // These lists are ignored for 'admin', which has access to everything.
   avatarIds?: string[];
   contextIds?: string[];
   voiceAgentIds?: string[];
+  sessionSetup?: SessionSetup;
 }
 
-// Current user data without the password, used by the UI and session.
 export interface SessionUser {
   email: string;
   role: UserRole;
+}
+
+export interface UserProfile extends SessionUser {
+  sessionSetup: SessionSetup;
 }

@@ -1,12 +1,13 @@
-import { unauthorized } from '@/lib/auth/responses';
+import { forbidden, unauthorized } from '@/lib/auth/responses';
 import { getCurrentUser } from '@/lib/auth/session';
-import { isAdmin } from '@/lib/auth/users';
+import { getSessionSetup, isAdmin } from '@/lib/auth/users';
 import { listVoiceAgents, VoiceAgentsApiError } from '@/lib/live-avatar/voice-agents';
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+    if (getSessionSetup(user) !== 'voiceAgent') return forbidden();
 
     if (!isAdmin(user)) {
       // Regular users only see explicitly allowed agents from the account's own space

@@ -1,16 +1,14 @@
-import type { NextRequest } from 'next/server';
-import { forbidden, unauthorized } from '@/lib/auth/responses';
-import { getCurrentUser } from '@/lib/auth/session';
-import { isAdmin } from '@/lib/auth/users';
-import { type LiveAvatarResponse, liveAvatarFetch } from '@/lib/live-avatar/api';
-import { getVoiceAgent, SUPPORTED_AGENT_TYPE } from '@/lib/live-avatar/voice-agents';
+import type {NextRequest} from 'next/server';
+import {forbidden, unauthorized} from '@/lib/auth/responses';
+import {getCurrentUser} from '@/lib/auth/session';
+import {getSessionSetup, isAdmin} from '@/lib/auth/users';
+import {liveAvatarFetch, type LiveAvatarResponse} from '@/lib/live-avatar/api';
+import {getVoiceAgent, SUPPORTED_AGENT_TYPE} from '@/lib/live-avatar/voice-agents';
 
 interface StartSessionRequestBody {
   avatarId?: string;
   language?: string;
-  // Preferred: a stored voice agent supplies the voice and context
   voiceAgentId?: string | null;
-  // Legacy avatar_persona path, used when no voice agent is selected
   voiceId?: string;
   contextId?: string | null;
 }
@@ -31,9 +29,13 @@ export async function POST(request: NextRequest) {
     const body: StartSessionRequestBody = await request.json().catch(() => ({}));
     const { avatarId, language, voiceAgentId, voiceId, contextId } = body;
     if (!avatarId || !language) return badRequest('Аватар и язык обязательны');
-    if (!voiceAgentId && !voiceId) return badRequest('Выберите голосового агента или голос');
+    const setup = getSessionSetup(user);
+    if (setup === 'voiceAgent' && !voiceAgentId) return badRequest('Выберите голосового агента');
+    if (setup === 'persona' && voiceAgentId) {
+      return badRequest('Голосовые агенты недоступны для этого пользователя');
+    }
+    if (setup === 'persona' && !voiceId) return badRequest('Голос аватара обязателен');
 
-    // Regular users may only use the avatars, agents and contexts assigned to them.
     if (!isAdmin(user)) {
       const allowed =
         user.avatarIds?.includes(avatarId) &&

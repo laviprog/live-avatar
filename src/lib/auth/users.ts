@@ -1,4 +1,4 @@
-import type { AppUser } from '@/types/user';
+import type { AppUser, SessionSetup } from '@/types/user';
 
 let cachedUsers: AppUser[] | null = null;
 
@@ -8,7 +8,9 @@ let cachedUsers: AppUser[] | null = null;
  * [
  *   { "email": "admin@example.com", "password": "secret", "role": "admin" },
  *   { "email": "user@example.com", "password": "secret", "role": "user",
- *     "avatarIds": ["avatar_1"], "contextIds": ["context_1"] }
+ *     "avatarIds": ["avatar_1"], "contextIds": ["context_1"] },
+ *   { "email": "agent@example.com", "password": "secret", "role": "user",
+ *     "sessionSetup": "voiceAgent", "avatarIds": ["avatar_1"], "voiceAgentIds": ["agent_1"] }
  * ]
  */
 export function getUsers(): AppUser[] {
@@ -54,4 +56,8 @@ export function verifyCredentials(email: string, password: string): AppUser | nu
 
 export function isAdmin(user: AppUser): boolean {
   return user.role === 'admin';
+}
+
+export function getSessionSetup(user: AppUser): SessionSetup {
+  return user.sessionSetup === 'voiceAgent' ? 'voiceAgent' : 'persona';
 }
