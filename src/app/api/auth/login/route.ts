@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server';
-import { verifyCredentials } from '@/lib/auth/users';
+import type { NextRequest } from 'next/server';
 import { setSessionCookie } from '@/lib/auth/session';
+import { verifyCredentials } from '@/lib/auth/users';
 
 export async function POST(request: NextRequest) {
   try {

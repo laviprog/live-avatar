@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
-import { useLiveAvatarContext } from '@/logic/context';
 import { VoiceChatState } from '@heygen/liveavatar-web-sdk';
+import { useCallback, useState } from 'react';
+import { useLiveAvatarContext } from '@/logic/context';
 
 export const useVoiceChat = () => {
   const {
@@ -20,14 +20,6 @@ export const useVoiceChat = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  const mute = useCallback(async () => {
-    return await muteMic();
-  }, [muteMic]);
-
-  const unmute = useCallback(async () => {
-    return await unmuteMic();
-  }, [unmuteMic]);
-
   const start = useCallback(async () => {
     setError(null);
     try {
@@ -44,35 +36,17 @@ export const useVoiceChat = () => {
     return sessionRef.current.voiceChat.stop();
   }, [sessionRef]);
 
-  const isLoading = useMemo(() => {
-    return voiceChatState === VoiceChatState.STARTING;
-  }, [voiceChatState]);
-
-  const isActive = useMemo(() => {
-    return voiceChatState === VoiceChatState.ACTIVE;
-  }, [voiceChatState]);
-
-  const startPushToTalk = useCallback(async () => {
-    return await sessionRef.current.voiceChat.startPushToTalk();
-  }, [sessionRef]);
-
-  const stopPushToTalk = useCallback(async () => {
-    return await sessionRef.current.voiceChat.stopPushToTalk();
-  }, [sessionRef]);
-
   return {
-    mute,
-    unmute,
+    mute: muteMic,
+    unmute: unmuteMic,
     start,
     stop,
-    isLoading,
-    isActive,
+    isLoading: voiceChatState === VoiceChatState.STARTING,
+    isActive: voiceChatState === VoiceChatState.ACTIVE,
     isMuted,
     isMicSuspended,
     isUserTalking,
     isAvatarTalking,
-    startPushToTalk,
-    stopPushToTalk,
     error,
   };
 };

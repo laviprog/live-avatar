@@ -19,3 +19,10 @@ next-env.d.ts
 
 .idea
 .vscode
+
+Dockerfile
+docker-compose.yml
+README.md
+TODO.md
+assets
+*.wav

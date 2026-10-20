@@ -3,14 +3,25 @@ services:
     build:
       context: .
       target: runner
+      args:
+        BASE_PATH: ${BASE_PATH-/avatar}
+        NEXT_PUBLIC_BASE_API_URL_HEYGEN: ${NEXT_PUBLIC_BASE_API_URL_HEYGEN:-https://api.liveavatar.com}
     image: live-avatar:1.0.0
     ports:
       - '127.0.0.1:3003:3000'
     env_file:
-      - .env.production
+      - .env.local
     networks:
       - live-avatar-network
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
 
 networks:
   live-avatar-network:

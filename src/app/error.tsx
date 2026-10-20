@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Button from '@/components/ui/button';
 
-export default function Error({ error, reset }: { error: Error; reset: () => void }) {
+export default function ErrorPage({ error, reset }: { error: Error; reset: () => void }) {
   useEffect(() => {
     console.error(error);
   }, [error]);

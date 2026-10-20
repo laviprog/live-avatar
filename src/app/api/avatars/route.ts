@@ -1,39 +1,26 @@
-import { getSessionUser } from '@/lib/auth/session';
-import { getUserByEmail, isAdmin } from '@/lib/auth/users';
-import { Avatar } from '@/types/avatar';
-
-const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
-const API_KEY = process.env.API_KEY_HEYGEN!;
+import { unauthorized } from '@/lib/auth/responses';
+import { getCurrentUser } from '@/lib/auth/session';
+import { isAdmin } from '@/lib/auth/users';
+import { type LiveAvatarResponse, liveAvatarFetch } from '@/lib/live-avatar/api';
+import type { Avatar } from '@/types/avatar';
 
 export async function GET() {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return Response.json({ error: 'Требуется авторизация' }, { status: 401 });
-    }
+    const user = await getCurrentUser();
+    if (!user) return unauthorized();
 
-    const res = await fetch(`${API_URL}/v1/avatars`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': API_KEY,
-      },
-    });
-
+    const res = await liveAvatarFetch('/v1/avatars');
     if (!res.ok) {
-      const errorData = await res.json();
-      console.error('Error getting avatars data:', errorData);
+      console.error('Error getting avatars data:', await res.text());
       return Response.json({ error: 'Не удалось загрузить аватары' }, { status: res.status });
     }
 
-    const avatars: Avatar[] = (await res.json()).data.results;
+    const avatars = ((await res.json()) as LiveAvatarResponse<{ results: Avatar[] }>).data.results;
 
-    // Rights filtering: the admin sees everything, the regular user sees only the allowed IDs.
-    const user = getUserByEmail(session.email);
-    const filtered =
-      user && !isAdmin(user) ? avatars.filter((a) => user.avatarIds?.includes(a.id)) : avatars;
-
-    return Response.json(filtered);
+    // Admins see every avatar; regular users only see explicitly allowed IDs.
+    return Response.json(
+      isAdmin(user) ? avatars : avatars.filter((a) => user.avatarIds?.includes(a.id))
+    );
   } catch (error) {
     console.error('Error getting avatars data:', error);
     return Response.json({ error: 'Не удалось загрузить аватары' }, { status: 500 });

@@ -1,24 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LiveAvatarSession } from './LiveAvatarSession';
-import { Avatar, AvatarPage, AvatarSource } from '@/types/avatar';
-import { Context } from '@/types/context';
-import { SessionUser } from '@/types/user';
+import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { LANGUAGE_LIST } from '@/data/languages';
 import { BASE_PATH } from '@/lib/utils';
-
-export type SessionMode = 'FULL';
+import type { Avatar, AvatarPage, AvatarSource } from '@/types/avatar';
+import type { Context } from '@/types/context';
+import type { SessionUser } from '@/types/user';
+import type { VoiceAgent } from '@/types/voice-agent';
+import { LiveAvatarSession } from './LiveAvatarSession';
 
 const PUBLIC_AVATAR_PAGE_SIZE = 100;
+const EMPTY_AVATAR_PAGE: AvatarPage = { count: 0, next: null, previous: null, results: [] };
 const FORM_PREFERENCES_STORAGE_KEY = 'live-avatar:form-preferences';
 
 interface StoredFormPreferences {
   avatarSource?: AvatarSource;
   selectedAvatarIds?: Partial<Record<AvatarSource, string>>;
   contextId?: string | null;
+  voiceAgentId?: string | null;
   language?: string;
   noInterrupt?: boolean;
 }
@@ -55,6 +56,10 @@ const readStoredFormPreferences = (): StoredFormPreferences | null => {
       contextId:
         preferences.contextId === null || typeof preferences.contextId === 'string'
           ? preferences.contextId
+          : undefined,
+      voiceAgentId:
+        preferences.voiceAgentId === null || typeof preferences.voiceAgentId === 'string'
+          ? preferences.voiceAgentId
           : undefined,
       language: typeof preferences.language === 'string' ? preferences.language : undefined,
       noInterrupt:
@@ -109,6 +114,21 @@ const getContexts = async (): Promise<Context[]> => {
   return res.json();
 };
 
+// Voice agents are optional: if they fail to load, the form falls back to avatar + context
+const getVoiceAgents = async (): Promise<VoiceAgent[]> => {
+  try {
+    const res = await fetch(`${BASE_PATH}/api/voice-agents`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch voice agents: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.warn(error);
+    return [];
+  }
+};
+
 const getCurrentUser = async (): Promise<SessionUser | null> => {
   const res = await fetch(`${BASE_PATH}/api/auth/me`, {
     method: 'GET',
@@ -125,7 +145,6 @@ const getCurrentUser = async (): Promise<SessionUser | null> => {
 export const LiveAvatar = () => {
   const router = useRouter();
   const [sessionToken, setSessionToken] = useState('');
-  const mode: SessionMode = 'FULL';
   const [startingSession, setStartingSession] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -147,6 +166,8 @@ export const LiveAvatar = () => {
     public: '',
   });
   const [contextId, setContextId] = useState<string | null>(null);
+  const [voiceAgents, setVoiceAgents] = useState<VoiceAgent[]>([]);
+  const [voiceAgentId, setVoiceAgentId] = useState<string | null>(null);
   const [language, setLanguage] = useState('ru');
   const [noInterrupt, setNoInterrupt] = useState(false);
 
@@ -156,10 +177,13 @@ export const LiveAvatar = () => {
         avatar.name.toLocaleLowerCase().includes(normalizedPublicAvatarSearch)
       )
     : publicAvatars;
+  const isAdmin = user?.role === 'admin';
   const currentAvatars = avatarSource === 'personal' ? avatars : filteredPublicAvatars;
   const avatarId = selectedAvatarIds[avatarSource];
   const selectedAvatar = currentAvatars.find((avatar) => avatar.id === avatarId);
   const voiceId = selectedAvatar?.default_voice?.id ?? '';
+  // A voice agent brings its own voice and context, so the avatar's voice is not required then
+  const canStart = Boolean(avatarId && language && (voiceAgentId || voiceId));
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -167,14 +191,28 @@ export const LiveAvatar = () => {
         setIsDataLoading(true);
         setDataError(null);
 
-        const [fetchedAvatars, fetchedPublicAvatars, fetchedContexts, fetchedUser] =
-          await Promise.all([getAvatars(), getPublicAvatars(1), getContexts(), getCurrentUser()]);
+        // The public catalog is admin-only, so request it only once the role is known
+        const userRequest = getCurrentUser();
+        const [
+          fetchedAvatars,
+          fetchedPublicAvatars,
+          fetchedContexts,
+          fetchedVoiceAgents,
+          fetchedUser,
+        ] = await Promise.all([
+          getAvatars(),
+          userRequest.then((u) => (u?.role === 'admin' ? getPublicAvatars(1) : EMPTY_AVATAR_PAGE)),
+          getContexts(),
+          getVoiceAgents(),
+          userRequest,
+        ]);
 
         setAvatars(fetchedAvatars);
         setPublicAvatars(fetchedPublicAvatars.results);
         setPublicAvatarCount(fetchedPublicAvatars.count);
         setHasMorePublicAvatars(Boolean(fetchedPublicAvatars.next));
         setContexts(fetchedContexts);
+        setVoiceAgents(fetchedVoiceAgents);
         setUser(fetchedUser);
 
         const storedPreferences = readStoredFormPreferences();
@@ -188,15 +226,11 @@ export const LiveAvatar = () => {
         )
           ? storedPreferences?.selectedAvatarIds?.public
           : fetchedPublicAvatars.results[0]?.id;
-        const preferredAvatarSource = storedPreferences?.avatarSource;
-        const restoredAvatarSource =
-          preferredAvatarSource === 'personal' && personalAvatarId
-            ? 'personal'
-            : preferredAvatarSource === 'public' && publicAvatarId
-              ? 'public'
-              : personalAvatarId
-                ? 'personal'
-                : 'public';
+        // Fall back to the public catalog only when it is available and nothing personal is
+        const restoredAvatarSource: AvatarSource =
+          publicAvatarId && (storedPreferences?.avatarSource === 'public' || !personalAvatarId)
+            ? 'public'
+            : 'personal';
         const restoredContextId =
           storedPreferences?.contextId === null
             ? null
@@ -215,6 +249,11 @@ export const LiveAvatar = () => {
         });
         setAvatarSource(restoredAvatarSource);
         setContextId(restoredContextId ?? null);
+        setVoiceAgentId(
+          fetchedVoiceAgents.some((agent) => agent.id === storedPreferences?.voiceAgentId)
+            ? (storedPreferences?.voiceAgentId ?? null)
+            : null
+        );
         setLanguage(restoredLanguage ?? 'ru');
         setNoInterrupt(storedPreferences?.noInterrupt ?? false);
         setFormPreferencesReady(true);
@@ -240,6 +279,7 @@ export const LiveAvatar = () => {
           avatarSource,
           selectedAvatarIds,
           contextId,
+          voiceAgentId,
           language,
           noInterrupt,
         } satisfies StoredFormPreferences)
@@ -247,10 +287,18 @@ export const LiveAvatar = () => {
     } catch (error) {
       console.warn('Failed to save form preferences to localStorage:', error);
     }
-  }, [avatarSource, contextId, formPreferencesReady, language, noInterrupt, selectedAvatarIds]);
+  }, [
+    avatarSource,
+    contextId,
+    formPreferencesReady,
+    language,
+    noInterrupt,
+    selectedAvatarIds,
+    voiceAgentId,
+  ]);
 
   const handleStartFullSession = async () => {
-    if (!avatarId || !voiceId || !language) {
+    if (!canStart) {
       toast.error('Заполните все обязательные поля');
       return;
     }
@@ -260,13 +308,11 @@ export const LiveAvatar = () => {
       const res = await fetch(`${BASE_PATH}/api/start-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          avatarId,
-          contextId,
-          language,
-          voiceId,
-          avatarSource,
-        }),
+        body: JSON.stringify(
+          voiceAgentId
+            ? { avatarId, language, voiceAgentId }
+            : { avatarId, language, voiceId, contextId }
+        ),
       });
 
       if (!res.ok) {
@@ -364,6 +410,7 @@ export const LiveAvatar = () => {
         <div className="flex flex-col items-center gap-4 p-8">
           <p className="text-red-400 text-lg">{dataError}</p>
           <button
+            type="button"
             onClick={() => window.location.reload()}
             className="px-6 py-3 rounded-lg bg-white/10 text-white font-medium border border-white/20 hover:bg-white/20 transition-colors"
           >
@@ -389,6 +436,7 @@ export const LiveAvatar = () => {
                 )}
               </span>
               <button
+                type="button"
                 onClick={handleLogout}
                 className="text-white/70 hover:text-white underline underline-offset-2 transition-colors"
               >
@@ -402,31 +450,33 @@ export const LiveAvatar = () => {
 
           <div className="w-full flex flex-col items-center gap-3">
             <div className="w-full rounded-2xl bg-white/[0.04] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
-              <div className="mb-3 flex rounded-xl bg-black/25 p-1">
-                {(['personal', 'public'] as const).map((source) => {
-                  const isActive = avatarSource === source;
-                  const count = source === 'personal' ? avatars.length : publicAvatarCount;
-                  const isDisabled = source === 'personal' && avatars.length === 0;
+              {isAdmin && (
+                <div className="mb-3 flex rounded-xl bg-black/25 p-1">
+                  {(['personal', 'public'] as const).map((source) => {
+                    const isActive = avatarSource === source;
+                    const count = source === 'personal' ? avatars.length : publicAvatarCount;
+                    const isDisabled = source === 'personal' && avatars.length === 0;
 
-                  return (
-                    <button
-                      key={source}
-                      type="button"
-                      aria-pressed={isActive}
-                      disabled={isDisabled}
-                      onClick={() => setAvatarSource(source)}
-                      className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-medium transition-[background-color,color,transform] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
-                        isActive
-                          ? 'bg-white text-black shadow-sm'
-                          : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
-                      }`}
-                    >
-                      {source === 'personal' ? 'Личные' : 'Публичные'}
-                      <span className="ml-2 tabular-nums opacity-60">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <button
+                        key={source}
+                        type="button"
+                        aria-pressed={isActive}
+                        disabled={isDisabled}
+                        onClick={() => setAvatarSource(source)}
+                        className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-medium transition-[background-color,color,transform] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
+                          isActive
+                            ? 'bg-white text-black shadow-sm'
+                            : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
+                        }`}
+                      >
+                        {source === 'personal' ? 'Личные' : 'Публичные'}
+                        <span className="ml-2 tabular-nums opacity-60">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {avatarSource === 'public' && (
                 <div className="mb-3">
@@ -471,7 +521,7 @@ export const LiveAvatar = () => {
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
                   {selectedAvatar?.preview_url ? (
                     // The provider controls preview hosts, so a native image avoids a brittle host allowlist.
-                    // eslint-disable-next-line @next/next/no-img-element
+                    // biome-ignore lint/performance/noImgElement: preview hosts are provider-controlled
                     <img
                       src={selectedAvatar.preview_url}
                       alt={`Превью аватара ${selectedAvatar.name}`}
@@ -514,7 +564,9 @@ export const LiveAvatar = () => {
 
                   <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-xs text-white/45">
                     <span className="truncate">
-                      {selectedAvatar?.default_voice?.name ?? 'Голос по умолчанию не задан'}
+                      {voiceAgentId
+                        ? 'Голос задаётся голосовым агентом'
+                        : (selectedAvatar?.default_voice?.name ?? 'Голос по умолчанию не задан')}
                     </span>
                     {avatarSource === 'public' && hasMorePublicAvatars && (
                       <button
@@ -533,6 +585,30 @@ export const LiveAvatar = () => {
               </div>
             </div>
 
+            {voiceAgents.length > 0 && (
+              <div className="w-full">
+                <label
+                  htmlFor="voice-agent-select"
+                  className="block mb-1 text-sm font-medium text-white"
+                >
+                  Голосовой агент
+                </label>
+                <select
+                  id="voice-agent-select"
+                  value={voiceAgentId ?? ''}
+                  onChange={(e) => setVoiceAgentId(e.target.value || null)}
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
+                >
+                  <option value="">Не выбран — голос аватара и контекст</option>
+                  {voiceAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.is_public ? `${agent.name} (публичный)` : agent.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="w-full">
               <label htmlFor="context-select" className="block mb-1 text-sm font-medium text-white">
                 Контекст
@@ -541,7 +617,8 @@ export const LiveAvatar = () => {
                 id="context-select"
                 value={contextId ?? ''}
                 onChange={(e) => handleContextChange(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
+                disabled={Boolean(voiceAgentId)}
+                className="w-full px-4 py-3 rounded-lg bg-white/5 text-white text-lg border border-white/10 focus:outline-none focus:border-white/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">Не выбран</option>
                 {contexts.map((context) => (
@@ -550,6 +627,9 @@ export const LiveAvatar = () => {
                   </option>
                 ))}
               </select>
+              {voiceAgentId && (
+                <p className="mt-1.5 text-xs text-white/45">Контекст задаётся голосовым агентом</p>
+              )}
             </div>
 
             <div className="w-full">
@@ -597,8 +677,9 @@ export const LiveAvatar = () => {
 
           <div className="w-full flex flex-col gap-3">
             <button
+              type="button"
               onClick={handleStartFullSession}
-              disabled={startingSession || !avatarId || !voiceId || !language}
+              disabled={startingSession || !canStart}
               className="w-full px-6 py-3 rounded-lg bg-white/10 text-white font-medium text-lg border border-white/20 hover:bg-white/20 active:scale-[0.96] transition-[background-color,transform] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {startingSession ? 'Запуск...' : 'Начать сессию'}
@@ -607,7 +688,6 @@ export const LiveAvatar = () => {
         </div>
       ) : (
         <LiveAvatarSession
-          mode={mode}
           sessionAccessToken={sessionToken}
           onSessionStopped={onSessionStopped}
           noInterrupt={noInterrupt}

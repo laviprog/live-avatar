@@ -1,4 +1,4 @@
-import { AppUser } from '@/types/user';
+import type { AppUser } from '@/types/user';
 
 let cachedUsers: AppUser[] | null = null;
 

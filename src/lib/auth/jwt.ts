@@ -1,5 +1,5 @@
-import { SignJWT, jwtVerify } from 'jose';
-import { SessionUser } from '@/types/user';
+import { jwtVerify, SignJWT } from 'jose';
+import type { SessionUser } from '@/types/user';
 
 export const SESSION_COOKIE = 'session';
 export const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days

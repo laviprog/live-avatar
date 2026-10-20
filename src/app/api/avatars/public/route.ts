@@ -1,5 +1,7 @@
-import { NextRequest } from 'next/server';
-import { getSessionUser } from '@/lib/auth/session';
+import type { NextRequest } from 'next/server';
+import { forbidden, unauthorized } from '@/lib/auth/responses';
+import { getCurrentUser } from '@/lib/auth/session';
+import { isAdmin } from '@/lib/auth/users';
 import { getPublicAvatarPage, PublicAvatarsApiError } from '@/lib/live-avatar/public-avatars';
 
 const DEFAULT_PAGE_SIZE = 24;
@@ -14,10 +16,10 @@ const parsePositiveInteger = (value: string | null, fallback: number) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return Response.json({ error: 'Требуется авторизация' }, { status: 401 });
-    }
+    const user = await getCurrentUser();
+    if (!user) return unauthorized();
+    // The public catalog is admin-only: regular users work with their assigned avatars.
+    if (!isAdmin(user)) return forbidden();
 
     const page = parsePositiveInteger(request.nextUrl.searchParams.get('page'), 1);
     const pageSize = parsePositiveInteger(

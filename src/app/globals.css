@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
   --black: #181818;
   --dark: #333333;
@@ -9,7 +13,6 @@
 body {
   background: var(--black);
   color: var(--white);
-  font-family: sans-serif;
 }
 
 select {

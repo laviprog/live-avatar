@@ -1,14 +1,7 @@
-import { AvatarPage } from '@/types/avatar';
+import type { AvatarPage } from '@/types/avatar';
+import { type LiveAvatarResponse, liveAvatarFetch } from './api';
 
-const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
-const API_KEY = process.env.API_KEY_HEYGEN!;
 const PUBLIC_AVATARS_CACHE_TTL_SECONDS = 10 * 60 * 60;
-
-interface LiveAvatarResponse<T> {
-  code: number;
-  data: T;
-  message: string | null;
-}
 
 export class PublicAvatarsApiError extends Error {
   constructor(
@@ -21,16 +14,8 @@ export class PublicAvatarsApiError extends Error {
 }
 
 export async function getPublicAvatarPage(page: number, pageSize: number): Promise<AvatarPage> {
-  const url = new URL('/v1/avatars/public', API_URL);
-  url.searchParams.set('page', String(page));
-  url.searchParams.set('page_size', String(pageSize));
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'X-API-KEY': API_KEY,
-    },
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const response = await liveAvatarFetch(`/v1/avatars/public?${params}`, {
     next: { revalidate: PUBLIC_AVATARS_CACHE_TTL_SECONDS },
   });
 
@@ -46,22 +31,4 @@ export async function getPublicAvatarPage(page: number, pageSize: number): Promi
   }
 
   return payload.data;
-}
-
-export async function isPublicAvatar(avatarId: string): Promise<boolean> {
-  const pageSize = 100;
-
-  for (let page = 1; page <= 100; page += 1) {
-    const result = await getPublicAvatarPage(page, pageSize);
-
-    if (result.results.some((avatar) => avatar.id === avatarId)) {
-      return true;
-    }
-
-    if (!result.next) {
-      return false;
-    }
-  }
-
-  return false;
 }

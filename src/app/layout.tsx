@@ -1,10 +1,9 @@
-import React from 'react';
+import type React from 'react';
 import './globals.css';
-import { Slide, ToastContainer } from 'react-toastify';
 import { Inter } from 'next/font/google';
-import { cn } from '@/lib/utils';
+import { Slide, ToastContainer } from 'react-toastify';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter' });
 
 export default function RootLayout({
   children,
@@ -12,7 +11,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={cn('h-full font-sans', inter.variable)}>
+    <html lang="ru" className={`h-full font-sans ${inter.variable}`}>
       <body className="h-full flex flex-col justify-center items-center antialiased">
         <ToastContainer
           position="top-left"

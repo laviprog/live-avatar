@@ -1,115 +1,86 @@
-import { NextRequest } from 'next/server';
-import { getSessionUser } from '@/lib/auth/session';
-import { getUserByEmail, isAdmin } from '@/lib/auth/users';
-import { isPublicAvatar } from '@/lib/live-avatar/public-avatars';
-import { AvatarSource } from '@/types/avatar';
+import type { NextRequest } from 'next/server';
+import { forbidden, unauthorized } from '@/lib/auth/responses';
+import { getCurrentUser } from '@/lib/auth/session';
+import { isAdmin } from '@/lib/auth/users';
+import { type LiveAvatarResponse, liveAvatarFetch } from '@/lib/live-avatar/api';
+import { getVoiceAgent, SUPPORTED_AGENT_TYPE } from '@/lib/live-avatar/voice-agents';
 
-interface StartFullModeSessionRequestBody {
-  avatarId: string;
-  voiceId: string;
-  contextId: string | null;
-  language: string;
-  avatarSource?: AvatarSource;
+interface StartSessionRequestBody {
+  avatarId?: string;
+  language?: string;
+  // Preferred: a stored voice agent supplies the voice and context
+  voiceAgentId?: string | null;
+  // Legacy avatar_persona path, used when no voice agent is selected
+  voiceId?: string;
+  contextId?: string | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_BASE_API_URL_HEYGEN!;
-const API_KEY = process.env.API_KEY_HEYGEN!;
+interface SessionTokenData {
+  session_token: string;
+  session_id: string;
+}
+
+const START_FAILED = 'Не удалось начать сессию';
+const badRequest = (error: string) => Response.json({ error }, { status: 400 });
 
 export async function POST(request: NextRequest) {
-  let session_token = '';
-  let session_id = '';
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return new Response(JSON.stringify({ error: 'Требуется авторизация' }), { status: 401 });
+    const user = await getCurrentUser();
+    if (!user) return unauthorized();
+
+    const body: StartSessionRequestBody = await request.json().catch(() => ({}));
+    const { avatarId, language, voiceAgentId, voiceId, contextId } = body;
+    if (!avatarId || !language) return badRequest('Аватар и язык обязательны');
+    if (!voiceAgentId && !voiceId) return badRequest('Выберите голосового агента или голос');
+
+    // Regular users may only use the avatars, agents and contexts assigned to them.
+    if (!isAdmin(user)) {
+      const allowed =
+        user.avatarIds?.includes(avatarId) &&
+        (voiceAgentId
+          ? user.voiceAgentIds?.includes(voiceAgentId)
+          : !contextId || user.contextIds?.includes(contextId));
+      if (!allowed) return forbidden('Доступ к аватару, агенту или контексту запрещён');
     }
 
-    const body: StartFullModeSessionRequestBody = await request.json().catch(() => ({}));
-
-    // Regular users cannot start sessions with personal avatars or contexts they do not own.
-    const user = getUserByEmail(session.email);
-    if (user && !isAdmin(user)) {
-      const avatarAllowed =
-        body.avatarSource === 'public'
-          ? await isPublicAvatar(body.avatarId)
-          : user.avatarIds?.includes(body.avatarId);
-      const contextAllowed = !body.contextId || user.contextIds?.includes(body.contextId);
-      if (!avatarAllowed || !contextAllowed) {
-        return new Response(JSON.stringify({ error: 'Доступ к аватару или контексту запрещён' }), {
-          status: 403,
-        });
+    if (voiceAgentId) {
+      const agent = await getVoiceAgent(voiceAgentId);
+      if (!agent) return badRequest('Голосовой агент не найден');
+      if (agent.agent_type !== SUPPORTED_AGENT_TYPE) {
+        return badRequest('Поддерживаются только агенты типа LiveAvatar');
       }
     }
 
-    const res = await fetch(`${API_URL}/v1/sessions/token`, {
+    const res = await liveAvatarFetch('/v1/sessions/token', {
       method: 'POST',
-      headers: {
-        'X-API-KEY': API_KEY,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         mode: 'FULL',
-        avatar_id: body.avatarId,
-        avatar_persona: {
-          voice_id: body.voiceId,
-          ...(body.contextId && { context_id: body.contextId }),
-          language: body.language,
-        },
+        avatar_id: avatarId,
+        ...(voiceAgentId
+          ? { voice_agent: { id: voiceAgentId, language } }
+          : {
+              avatar_persona: {
+                voice_id: voiceId,
+                ...(contextId && { context_id: contextId }),
+                language,
+              },
+            }),
       }),
     });
 
     if (!res.ok) {
-      // Check if response is JSON before parsing
-      const contentType = res.headers.get('content-type');
-      let errorMessage = 'Failed to retrieve session token';
-
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          const resp = await res.json();
-          if (resp.data && resp.data.length > 0) {
-            errorMessage = resp.data[0].message;
-          } else if (resp.error) {
-            errorMessage = resp.error;
-          } else if (resp.message) {
-            errorMessage = resp.message;
-          }
-        } catch (e) {
-          console.error('Failed to parse error response:', e);
-        }
-      } else {
-        // If it's not JSON, try to get the text
-        const text = await res.text();
-        console.log('Error response (text):', text);
-        errorMessage = text || errorMessage;
-      }
-
-      console.error('Session token request failed:', errorMessage);
-
-      return new Response(JSON.stringify({ error: 'Не удалось начать сессию' }), {
-        status: res.status,
-      });
+      console.error('Session token request failed:', res.status, await res.text());
+      return Response.json({ error: START_FAILED }, { status: res.status });
     }
 
-    const data = await res.json();
+    const { data } = (await res.json()) as LiveAvatarResponse<SessionTokenData>;
+    if (!data?.session_token) {
+      return Response.json({ error: START_FAILED }, { status: 502 });
+    }
 
-    session_token = data.data.session_token;
-    session_id = data.data.session_id;
+    return Response.json({ session_token: data.session_token, session_id: data.session_id });
   } catch (error) {
     console.error('Error retrieving session token:', error);
-    return new Response(JSON.stringify({ error: 'Не удалось начать сессию' }), {
-      status: 500,
-    });
+    return Response.json({ error: START_FAILED }, { status: 500 });
   }
-
-  if (!session_token) {
-    return new Response('Не удалось начать сессию', {
-      status: 500,
-    });
-  }
-  return new Response(JSON.stringify({ session_token, session_id }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
 }
