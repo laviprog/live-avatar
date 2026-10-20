@@ -10,7 +10,7 @@ services:
     ports:
       - '127.0.0.1:3003:3000'
     env_file:
-      - .env.local
+      - .env.production
     networks:
       - live-avatar-network
     restart: unless-stopped
